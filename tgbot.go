@@ -4,29 +4,33 @@ type TgBot struct {
 	Client *Client
 }
 
-type TgBotConfig struct {
-	BotToken            string
+type Config struct {
+	TelegramBotToken    string
 	FirebaseCredential  []byte
 	FirebaseDatabaseURL string
 }
 
-func NewBot() *TgBot {
+func NewBot(config Config) *TgBot {
+	client := newClient()
+	client.initBotAPI(config.TelegramBotToken)
+	client.initFirebase(config.FirebaseCredential, config.FirebaseDatabaseURL)
 	return &TgBot{
-		Client: &Client{
-			Sessions:        make(map[int64]*Session),
-			CommandHandlers: make(map[string]func(Session, string) bool),
-		},
+		Client: client,
 	}
 }
 
-func (tgbot *TgBot) RegisterTextHandler(handler func(Session, string) bool) {
+func (tgbot *TgBot) RegisterTextHandler(handler func(Session, string)) {
 	tgbot.Client.registerTextHandler(handler)
 }
 
-func (tgbot *TgBot) RegisterCommandHandler(cmd string, handler func(Session, string) bool) {
-	tgbot.Client.registerCommandHandler(cmd, handler)
+func (tgbot *TgBot) RegisterReloadCommandHandler(handler func()) {
+	tgbot.Client.registerReloadCommandHandler(handler)
 }
 
-func (tgbot *TgBot) Start(config TgBotConfig) error {
-	return tgbot.Client.start(config.BotToken, config.FirebaseCredential, config.FirebaseDatabaseURL)
+func (tgbot *TgBot) RegisterCustomCommandHandler(cmd string, handler func(Session, string) bool) {
+	tgbot.Client.registerCustomCommandHandler(cmd, handler)
+}
+
+func (tgbot *TgBot) Start() error {
+	return tgbot.Client.start()
 }

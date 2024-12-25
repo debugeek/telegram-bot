@@ -2,6 +2,7 @@ package tgbot
 
 import (
 	"context"
+	"encoding/base64"
 	"log"
 	"sync"
 	"time"
@@ -11,49 +12,31 @@ import (
 	"google.golang.org/api/option"
 )
 
+type Handlers struct {
+	TextHandler           func(Session, string)
+	ReloadCommandHandler  func()
+	CustomCommandHandlers map[string]func(Session, string) bool
+}
+
 type Client struct {
-	BotAPI          *tgbotapi.BotAPI
-	Firebase        Firebase
-	CCMS            CCMS
-	Sessions        map[int64]*Session
-	CommandHandlers map[string]func(Session, string) bool
-	TextHandler     func(Session, string) bool
-	mu              sync.RWMutex
+	BotAPI   *tgbotapi.BotAPI
+	Firebase Firebase
+	CCMS     CCMS
+	Sessions map[int64]*Session
+	Handlers Handlers
+	mu       sync.RWMutex
 }
 
-func (c *Client) start(token string, credential []byte, databaseURL string) error {
-	if err := c.startFirebase(credential, databaseURL); err != nil {
-		return err
+func newClient() *Client {
+	return &Client{
+		Sessions: make(map[int64]*Session),
+		Handlers: Handlers{
+			CustomCommandHandlers: make(map[string]func(Session, string) bool),
+		},
 	}
-
-	if err := c.reloadCCMS(); err != nil {
-		return err
-	}
-
-	if err := c.startBotAPI(token); err != nil {
-		return err
-	}
-
-	users, err := c.Firebase.getUsers()
-	if err != nil {
-		return err
-	}
-
-	for _, user := range users {
-		session := &Session{
-			ID:     user.ID,
-			User:   user,
-			client: c,
-		}
-		c.insertSession(session)
-	}
-
-	go c.runLoop()
-
-	return nil
 }
 
-func (c *Client) startFirebase(credential []byte, databaseURL string) error {
+func (c *Client) initFirebase(credential []byte, databaseURL string) error {
 	context := context.Background()
 	opt := option.WithCredentialsJSON(credential)
 	conf := &firebase.Config{
@@ -84,7 +67,7 @@ func (c *Client) startFirebase(credential []byte, databaseURL string) error {
 	return nil
 }
 
-func (c *Client) startBotAPI(token string) error {
+func (c *Client) initBotAPI(token string) error {
 	botAPI, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return err
@@ -99,25 +82,68 @@ func (c *Client) startBotAPI(token string) error {
 	return nil
 }
 
-func (c *Client) reloadCCMS() error {
+func (c *Client) start() error {
+	users, err := c.Firebase.getUsers()
+	if err != nil {
+		return err
+	}
+
+	for _, user := range users {
+		session := &Session{
+			ID:     user.ID,
+			User:   user,
+			client: c,
+		}
+		c.insertSession(session)
+	}
+
+	c.reload()
+
+	go c.runLoop()
+
+	return nil
+}
+
+func (c *Client) reload() error {
 	var CCMS CCMS
 	if err := c.Firebase.Database.NewRef("/ccms").Get(c.Firebase.Context, &CCMS); err != nil {
 		return err
 	}
+	for key, val := range CCMS.Texts.Localizations {
+		if bytes, err := base64.StdEncoding.DecodeString(val); err == nil {
+			CCMS.Texts.Localizations[key] = string(bytes)
+		}
+	}
+	for key, val := range CCMS.Texts.Prompts {
+		if bytes, err := base64.StdEncoding.DecodeString(val); err == nil {
+			CCMS.Texts.Prompts[key] = string(bytes)
+		}
+	}
 	c.CCMS = CCMS
+
+	if c.Handlers.ReloadCommandHandler != nil {
+		c.Handlers.ReloadCommandHandler()
+	}
+
 	return nil
 }
 
-func (c *Client) registerCommandHandler(cmd string, handler func(Session, string) bool) {
+func (c *Client) registerTextHandler(handler func(Session, string)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.CommandHandlers[cmd] = handler
+	c.Handlers.TextHandler = handler
 }
 
-func (c *Client) registerTextHandler(handler func(Session, string) bool) {
+func (c *Client) registerReloadCommandHandler(handler func()) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.TextHandler = handler
+	c.Handlers.ReloadCommandHandler = handler
+}
+
+func (c *Client) registerCustomCommandHandler(cmd string, handler func(Session, string) bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.Handlers.CustomCommandHandlers[cmd] = handler
 }
 
 func (c *Client) runLoop() {
@@ -187,11 +213,11 @@ func (c *Client) processMessage(session *Session, message *tgbotapi.Message) {
 	if message.IsCommand() {
 		switch message.Command() {
 		case CmdStart:
-			session.SendFormattedText(session, "Greetings.", CmdStart)
+			session.SendFormattedText("Greetings.", CmdStart)
 
 		case CmdReload:
 			if _, rv := c.CCMS.Admins[message.Chat.ID]; rv {
-				c.reloadCCMS()
+				c.reload()
 				session.SendText("Done.")
 			}
 
@@ -209,7 +235,7 @@ func (c *Client) processCommand(session *Session, command string, args string) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	handler, exists := c.CommandHandlers[command]
+	handler, exists := c.Handlers.CustomCommandHandlers[command]
 	if !exists {
 		return
 	}
@@ -225,7 +251,7 @@ func (c *Client) processText(session *Session, text string) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	handler := c.TextHandler
+	handler := c.Handlers.TextHandler
 	if handler != nil {
 		handler(*session, text)
 	}

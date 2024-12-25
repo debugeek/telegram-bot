@@ -6,16 +6,12 @@ type User struct {
 }
 
 type Texts struct {
-	Prompts map[string]string `json:"prompts"`
-}
-
-type Config struct {
-	BotToken string `json:"bot_token"`
+	Prompts       map[string]string `json:"prompts"`
+	Localizations map[string]string `json:"localizations"`
 }
 
 type CCMS struct {
 	Admins map[int64]string `json:"admins"`
-	Config Config           `json:"config"`
 	Texts  Texts            `json:"texts"`
 }
 

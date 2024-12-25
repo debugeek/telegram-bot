@@ -1,6 +1,7 @@
 package tgbot
 
 import (
+	"os"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -24,7 +25,43 @@ func (s *Session) SendText(text string) {
 	s.sendMessage(message)
 }
 
-func (s *Session) SendFormattedText(session *Session, text string, promptKey string) {
+func (s *Session) SendImage(file *os.File, name string) error {
+	message := tgbotapi.NewPhotoUpload(s.User.ID, tgbotapi.FileReader{
+		Name:   name,
+		Reader: file,
+		Size:   -1,
+	})
+	return s.sendMessage(message)
+}
+
+func (s *Session) SendVideo(file *os.File, name string) error {
+	message := tgbotapi.NewVideoUpload(s.User.ID, tgbotapi.FileReader{
+		Name:   name,
+		Reader: file,
+		Size:   -1,
+	})
+	return s.sendMessage(message)
+}
+
+func (s *Session) SendAudio(file *os.File, name string) error {
+	message := tgbotapi.NewAudioUpload(s.User.ID, tgbotapi.FileReader{
+		Name:   name,
+		Reader: file,
+		Size:   -1,
+	})
+	return s.sendMessage(message)
+}
+
+func (s *Session) SendFile(file *os.File, name string) error {
+	message := tgbotapi.NewDocumentUpload(s.User.ID, tgbotapi.FileReader{
+		Name:   name,
+		Reader: file,
+		Size:   -1,
+	})
+	return s.sendMessage(message)
+}
+
+func (s *Session) SendFormattedText(text string, promptKey string) {
 	if text == "" {
 		return
 	}
