@@ -14,7 +14,7 @@ type Session struct {
 	client  *Client
 }
 
-func (s *Session) SendText(text string) {
+func (s *Session) SendText(text string) error {
 	message := tgbotapi.MessageConfig{
 		BaseChat: tgbotapi.BaseChat{
 			ChatID:           s.ID,
@@ -22,10 +22,10 @@ func (s *Session) SendText(text string) {
 		},
 		Text: text,
 	}
-	s.sendMessage(message)
+	return s.sendMessage(message)
 }
 
-func (s *Session) SendTextUsingParseMode(text string, parseMode string) {
+func (s *Session) SendTextUsingParseMode(text string, parseMode string) error {
 	message := tgbotapi.MessageConfig{
 		BaseChat: tgbotapi.BaseChat{
 			ChatID:           s.ID,
@@ -34,7 +34,7 @@ func (s *Session) SendTextUsingParseMode(text string, parseMode string) {
 		Text:      text,
 		ParseMode: parseMode,
 	}
-	s.sendMessage(message)
+	return s.sendMessage(message)
 }
 
 func (s *Session) SendImage(file *os.File, name string) error {
@@ -73,28 +73,28 @@ func (s *Session) SendFile(file *os.File, name string) error {
 	return s.sendMessage(message)
 }
 
-func (s *Session) SendFormattedText(text string, promptKey string) {
+func (s *Session) SendFormattedText(text string, promptKey string) error {
 	if text == "" {
-		return
+		return nil
 	}
 
 	if promptText := s.client.CCMS.Texts.Prompts[promptKey]; promptText != "" {
 		text = strings.Join([]string{text, promptText}, "\n\n")
 	}
 
-	s.SendText(text)
+	return s.SendText(text)
 }
 
-func (s *Session) SendFormattedTextUsingParseMode(text string, promptKey string, parseMode string) {
+func (s *Session) SendFormattedTextUsingParseMode(text string, promptKey string, parseMode string) error {
 	if text == "" {
-		return
+		return nil
 	}
 
 	if promptText := s.client.CCMS.Texts.Prompts[promptKey]; promptText != "" {
 		text = strings.Join([]string{text, promptText}, "\n\n")
 	}
 
-	s.SendTextUsingParseMode(text, parseMode)
+	return s.SendTextUsingParseMode(text, parseMode)
 }
 
 func (s *Session) sendMessage(message tgbotapi.Chattable) error {
