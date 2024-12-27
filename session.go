@@ -25,6 +25,18 @@ func (s *Session) SendText(text string) {
 	s.sendMessage(message)
 }
 
+func (s *Session) SendTextUsingParseMode(text string, parseMode string) {
+	message := tgbotapi.MessageConfig{
+		BaseChat: tgbotapi.BaseChat{
+			ChatID:           s.ID,
+			ReplyToMessageID: 0,
+		},
+		Text:      text,
+		ParseMode: parseMode,
+	}
+	s.sendMessage(message)
+}
+
 func (s *Session) SendImage(file *os.File, name string) error {
 	message := tgbotapi.NewPhotoUpload(s.User.ID, tgbotapi.FileReader{
 		Name:   name,
@@ -71,6 +83,18 @@ func (s *Session) SendFormattedText(text string, promptKey string) {
 	}
 
 	s.SendText(text)
+}
+
+func (s *Session) SendFormattedTextUsingParseMode(text string, promptKey string, parseMode string) {
+	if text == "" {
+		return
+	}
+
+	if promptText := s.client.CCMS.Texts.Prompts[promptKey]; promptText != "" {
+		text = strings.Join([]string{text, promptText}, "\n\n")
+	}
+
+	s.SendTextUsingParseMode(text, parseMode)
 }
 
 func (s *Session) sendMessage(message tgbotapi.Chattable) error {
