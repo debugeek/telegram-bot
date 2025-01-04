@@ -1,5 +1,7 @@
 package tgbot
 
+import tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+
 type TgBot struct {
 	Client *Client
 }
@@ -17,6 +19,10 @@ func NewBot(config Config) *TgBot {
 	return &TgBot{
 		Client: client,
 	}
+}
+
+func (tgbot *TgBot) RegisterMessageHandler(handler func(Session, tgbotapi.Message) bool) {
+	tgbot.Client.registerMessageHandler(handler)
 }
 
 func (tgbot *TgBot) RegisterTextHandler(handler func(Session, string)) {
