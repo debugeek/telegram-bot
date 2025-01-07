@@ -208,10 +208,6 @@ func (c *Client) processUpdate(update tgbotapi.Update) {
 		c.insertSession(session)
 	}
 
-	if c.Handlers.RawMessageHandler != nil && c.Handlers.RawMessageHandler(*session, *message) {
-		return
-	}
-
 	c.processMessage(session, message)
 }
 
@@ -219,6 +215,10 @@ func (c *Client) processMessage(session *Session, message *tgbotapi.Message) {
 	if session.User.Blocked {
 		session.User.Blocked = false
 		c.Firebase.updateUser(session.User)
+	}
+
+	if c.Handlers.RawMessageHandler != nil && c.Handlers.RawMessageHandler(*session, *message) {
+		return
 	}
 
 	if message.IsCommand() {
