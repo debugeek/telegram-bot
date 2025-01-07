@@ -21,8 +21,8 @@ func NewBot(config Config) *TgBot {
 	}
 }
 
-func (tgbot *TgBot) RegisterMessageHandler(handler func(Session, tgbotapi.Message) bool) {
-	tgbot.Client.registerMessageHandler(handler)
+func (tgbot *TgBot) RegisterRawMessageHandler(handler func(Session, tgbotapi.Message) bool) {
+	tgbot.Client.registerRawMessageHandler(handler)
 }
 
 func (tgbot *TgBot) RegisterTextHandler(handler func(Session, string)) {

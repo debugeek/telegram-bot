@@ -13,7 +13,7 @@ import (
 )
 
 type Handlers struct {
-	MessageHandler        func(Session, tgbotapi.Message) bool
+	RawMessageHandler     func(Session, tgbotapi.Message) bool
 	TextHandler           func(Session, string)
 	ReloadCommandHandler  func()
 	CustomCommandHandlers map[string]func(Session, string) bool
@@ -129,10 +129,10 @@ func (c *Client) reload() error {
 	return nil
 }
 
-func (c *Client) registerMessageHandler(handler func(Session, tgbotapi.Message) bool) {
+func (c *Client) registerRawMessageHandler(handler func(Session, tgbotapi.Message) bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.Handlers.MessageHandler = handler
+	c.Handlers.RawMessageHandler = handler
 }
 
 func (c *Client) registerTextHandler(handler func(Session, string)) {
@@ -208,7 +208,7 @@ func (c *Client) processUpdate(update tgbotapi.Update) {
 		c.insertSession(session)
 	}
 
-	if c.Handlers.MessageHandler != nil && c.Handlers.MessageHandler(*session, *message) {
+	if c.Handlers.RawMessageHandler != nil && c.Handlers.RawMessageHandler(*session, *message) {
 		return
 	}
 
