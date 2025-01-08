@@ -22,7 +22,7 @@ func (s *Session) SendText(text string) error {
 		},
 		Text: text,
 	}
-	return s.sendMessage(message)
+	return s.SendMessage(message)
 }
 
 func (s *Session) SendTextUsingParseMode(text string, parseMode string) error {
@@ -34,7 +34,7 @@ func (s *Session) SendTextUsingParseMode(text string, parseMode string) error {
 		Text:      text,
 		ParseMode: parseMode,
 	}
-	return s.sendMessage(message)
+	return s.SendMessage(message)
 }
 
 func (s *Session) ReplyText(text string, replyToMessageID int) error {
@@ -45,7 +45,7 @@ func (s *Session) ReplyText(text string, replyToMessageID int) error {
 		},
 		Text: text,
 	}
-	return s.sendMessage(message)
+	return s.SendMessage(message)
 }
 
 func (s *Session) SendImage(file *os.File, name string) error {
@@ -54,7 +54,7 @@ func (s *Session) SendImage(file *os.File, name string) error {
 		Reader: file,
 		Size:   -1,
 	})
-	return s.sendMessage(message)
+	return s.SendMessage(message)
 }
 
 func (s *Session) SendVideo(file *os.File, name string) error {
@@ -63,7 +63,7 @@ func (s *Session) SendVideo(file *os.File, name string) error {
 		Reader: file,
 		Size:   -1,
 	})
-	return s.sendMessage(message)
+	return s.SendMessage(message)
 }
 
 func (s *Session) SendAudio(file *os.File, name string) error {
@@ -72,7 +72,7 @@ func (s *Session) SendAudio(file *os.File, name string) error {
 		Reader: file,
 		Size:   -1,
 	})
-	return s.sendMessage(message)
+	return s.SendMessage(message)
 }
 
 func (s *Session) SendFile(file *os.File, name string) error {
@@ -81,7 +81,7 @@ func (s *Session) SendFile(file *os.File, name string) error {
 		Reader: file,
 		Size:   -1,
 	})
-	return s.sendMessage(message)
+	return s.SendMessage(message)
 }
 
 func (s *Session) SendFormattedText(text string, promptKey string) error {
@@ -108,7 +108,7 @@ func (s *Session) SendFormattedTextUsingParseMode(text string, promptKey string,
 	return s.SendTextUsingParseMode(text, parseMode)
 }
 
-func (s *Session) sendMessage(message tgbotapi.Chattable) error {
+func (s *Session) SendMessage(message tgbotapi.Chattable) error {
 	_, err := s.client.BotAPI.Send(message)
 	if err != nil {
 		s.processError(err)
