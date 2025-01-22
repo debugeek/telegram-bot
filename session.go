@@ -7,14 +7,14 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
-type Session struct {
+type Session[USERDATA any] struct {
 	ID      int64
-	User    *User
+	User    *User[USERDATA]
 	command string
-	client  *Client
+	client  *Client[USERDATA]
 }
 
-func (s *Session) SendText(text string) error {
+func (s *Session[USERDATA]) SendText(text string) error {
 	message := tgbotapi.MessageConfig{
 		BaseChat: tgbotapi.BaseChat{
 			ChatID:           s.ID,
@@ -25,7 +25,7 @@ func (s *Session) SendText(text string) error {
 	return s.SendMessage(message)
 }
 
-func (s *Session) SendTextUsingParseMode(text string, parseMode string) error {
+func (s *Session[USERDATA]) SendTextUsingParseMode(text string, parseMode string) error {
 	message := tgbotapi.MessageConfig{
 		BaseChat: tgbotapi.BaseChat{
 			ChatID:           s.ID,
@@ -37,7 +37,7 @@ func (s *Session) SendTextUsingParseMode(text string, parseMode string) error {
 	return s.SendMessage(message)
 }
 
-func (s *Session) ReplyText(text string, replyToMessageID int) error {
+func (s *Session[USERDATA]) ReplyText(text string, replyToMessageID int) error {
 	message := tgbotapi.MessageConfig{
 		BaseChat: tgbotapi.BaseChat{
 			ChatID:           s.ID,
@@ -48,7 +48,7 @@ func (s *Session) ReplyText(text string, replyToMessageID int) error {
 	return s.SendMessage(message)
 }
 
-func (s *Session) SendImage(file *os.File, name string) error {
+func (s *Session[USERDATA]) SendImage(file *os.File, name string) error {
 	message := tgbotapi.NewPhotoUpload(s.User.ID, tgbotapi.FileReader{
 		Name:   name,
 		Reader: file,
@@ -57,7 +57,7 @@ func (s *Session) SendImage(file *os.File, name string) error {
 	return s.SendMessage(message)
 }
 
-func (s *Session) SendVideo(file *os.File, name string) error {
+func (s *Session[USERDATA]) SendVideo(file *os.File, name string) error {
 	message := tgbotapi.NewVideoUpload(s.User.ID, tgbotapi.FileReader{
 		Name:   name,
 		Reader: file,
@@ -66,7 +66,7 @@ func (s *Session) SendVideo(file *os.File, name string) error {
 	return s.SendMessage(message)
 }
 
-func (s *Session) SendAudio(file *os.File, name string) error {
+func (s *Session[USERDATA]) SendAudio(file *os.File, name string) error {
 	message := tgbotapi.NewAudioUpload(s.User.ID, tgbotapi.FileReader{
 		Name:   name,
 		Reader: file,
@@ -75,7 +75,7 @@ func (s *Session) SendAudio(file *os.File, name string) error {
 	return s.SendMessage(message)
 }
 
-func (s *Session) SendFile(file *os.File, name string) error {
+func (s *Session[USERDATA]) SendFile(file *os.File, name string) error {
 	message := tgbotapi.NewDocumentUpload(s.User.ID, tgbotapi.FileReader{
 		Name:   name,
 		Reader: file,
@@ -84,7 +84,7 @@ func (s *Session) SendFile(file *os.File, name string) error {
 	return s.SendMessage(message)
 }
 
-func (s *Session) SendFormattedText(text string, promptKey string) error {
+func (s *Session[USERDATA]) SendFormattedText(text string, promptKey string) error {
 	if text == "" {
 		return nil
 	}
@@ -96,7 +96,7 @@ func (s *Session) SendFormattedText(text string, promptKey string) error {
 	return s.SendText(text)
 }
 
-func (s *Session) SendFormattedTextUsingParseMode(text string, promptKey string, parseMode string) error {
+func (s *Session[USERDATA]) SendFormattedTextUsingParseMode(text string, promptKey string, parseMode string) error {
 	if text == "" {
 		return nil
 	}
@@ -108,7 +108,7 @@ func (s *Session) SendFormattedTextUsingParseMode(text string, promptKey string,
 	return s.SendTextUsingParseMode(text, parseMode)
 }
 
-func (s *Session) SendMessage(message tgbotapi.Chattable) error {
+func (s *Session[USERDATA]) SendMessage(message tgbotapi.Chattable) error {
 	_, err := s.client.BotAPI.Send(message)
 	if err != nil {
 		s.processError(err)
@@ -116,10 +116,10 @@ func (s *Session) SendMessage(message tgbotapi.Chattable) error {
 	return err
 }
 
-func (s *Session) processError(err error) {
+func (s *Session[USERDATA]) processError(err error) {
 	switch err.Error() {
 	case errChatNotFound, errNotMember:
 		s.User.Blocked = true
-		s.client.Firebase.updateUser(s.User)
+		s.client.Firebase.UpdateUser(s.User)
 	}
 }

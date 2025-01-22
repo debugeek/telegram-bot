@@ -12,32 +12,32 @@ import (
 	"google.golang.org/api/option"
 )
 
-type Handlers struct {
-	RawMessageHandler     func(Session, tgbotapi.Message) bool
-	TextHandler           func(Session, string)
+type Handlers[USERDATA any] struct {
+	RawMessageHandler     func(Session[USERDATA], tgbotapi.Message) bool
+	TextHandler           func(Session[USERDATA], string)
 	ReloadCommandHandler  func()
-	CustomCommandHandlers map[string]func(Session, string) bool
+	CustomCommandHandlers map[string]func(Session[USERDATA], string) bool
 }
 
-type Client struct {
+type Client[USERDATA any] struct {
 	BotAPI   *tgbotapi.BotAPI
-	Firebase Firebase
+	Firebase Firebase[USERDATA]
 	CCMS     CCMS
-	Sessions map[int64]*Session
-	Handlers Handlers
+	Sessions map[int64]*Session[USERDATA]
+	Handlers Handlers[USERDATA]
 	mu       sync.RWMutex
 }
 
-func newClient() *Client {
-	return &Client{
-		Sessions: make(map[int64]*Session),
-		Handlers: Handlers{
-			CustomCommandHandlers: make(map[string]func(Session, string) bool),
+func newClient[USERDATA any]() *Client[USERDATA] {
+	return &Client[USERDATA]{
+		Sessions: make(map[int64]*Session[USERDATA]),
+		Handlers: Handlers[USERDATA]{
+			CustomCommandHandlers: make(map[string]func(Session[USERDATA], string) bool),
 		},
 	}
 }
 
-func (c *Client) initFirebase(credential []byte, databaseURL string) error {
+func (c *Client[USERDATA]) initFirebase(credential []byte, databaseURL string) error {
 	context := context.Background()
 	opt := option.WithCredentialsJSON(credential)
 	conf := &firebase.Config{
@@ -58,7 +58,7 @@ func (c *Client) initFirebase(credential []byte, databaseURL string) error {
 		return err
 	}
 
-	firebase := Firebase{
+	firebase := Firebase[USERDATA]{
 		Firestore: firestore,
 		Database:  database,
 		Context:   context,
@@ -68,7 +68,7 @@ func (c *Client) initFirebase(credential []byte, databaseURL string) error {
 	return nil
 }
 
-func (c *Client) initBotAPI(token string) error {
+func (c *Client[USERDATA]) initBotAPI(token string) error {
 	botAPI, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return err
@@ -83,14 +83,14 @@ func (c *Client) initBotAPI(token string) error {
 	return nil
 }
 
-func (c *Client) start() error {
-	users, err := c.Firebase.getUsers()
+func (c *Client[USERDATA]) start() error {
+	users, err := c.Firebase.GetUsers()
 	if err != nil {
 		return err
 	}
 
 	for _, user := range users {
-		session := &Session{
+		session := &Session[USERDATA]{
 			ID:     user.ID,
 			User:   user,
 			client: c,
@@ -105,7 +105,7 @@ func (c *Client) start() error {
 	return nil
 }
 
-func (c *Client) reload() error {
+func (c *Client[USERDATA]) reload() error {
 	var CCMS CCMS
 	if err := c.Firebase.Database.NewRef("/ccms").Get(c.Firebase.Context, &CCMS); err != nil {
 		return err
@@ -129,31 +129,31 @@ func (c *Client) reload() error {
 	return nil
 }
 
-func (c *Client) registerRawMessageHandler(handler func(Session, tgbotapi.Message) bool) {
+func (c *Client[USERDATA]) registerRawMessageHandler(handler func(Session[USERDATA], tgbotapi.Message) bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Handlers.RawMessageHandler = handler
 }
 
-func (c *Client) registerTextHandler(handler func(Session, string)) {
+func (c *Client[USERDATA]) registerTextHandler(handler func(Session[USERDATA], string)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Handlers.TextHandler = handler
 }
 
-func (c *Client) registerReloadCommandHandler(handler func()) {
+func (c *Client[USERDATA]) registerReloadCommandHandler(handler func()) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Handlers.ReloadCommandHandler = handler
 }
 
-func (c *Client) registerCustomCommandHandler(cmd string, handler func(Session, string) bool) {
+func (c *Client[USERDATA]) registerCustomCommandHandler(cmd string, handler func(Session[USERDATA], string) bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Handlers.CustomCommandHandlers[cmd] = handler
 }
 
-func (c *Client) runLoop() {
+func (c *Client[USERDATA]) runLoop() {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 10
 
@@ -171,15 +171,15 @@ func (c *Client) runLoop() {
 	}
 }
 
-func (c *Client) getSession(id int64) *Session {
+func (c *Client[USERDATA]) getSession(id int64) *Session[USERDATA] {
 	return c.Sessions[id]
 }
 
-func (c *Client) insertSession(session *Session) {
+func (c *Client[USERDATA]) insertSession(session *Session[USERDATA]) {
 	c.Sessions[session.ID] = session
 }
 
-func (c *Client) processUpdate(update tgbotapi.Update) {
+func (c *Client[USERDATA]) processUpdate(update tgbotapi.Update) {
 	var message *tgbotapi.Message
 	if update.Message != nil {
 		message = update.Message
@@ -193,14 +193,14 @@ func (c *Client) processUpdate(update tgbotapi.Update) {
 	id := message.Chat.ID
 	session := c.getSession(id)
 	if session == nil {
-		user := &User{
+		user := &User[USERDATA]{
 			ID: id,
 		}
-		if err := c.Firebase.updateUser(user); err != nil {
+		if err := c.Firebase.UpdateUser(user); err != nil {
 			return
 		}
 
-		session = &Session{
+		session = &Session[USERDATA]{
 			ID:     id,
 			User:   user,
 			client: c,
@@ -211,10 +211,10 @@ func (c *Client) processUpdate(update tgbotapi.Update) {
 	c.processMessage(session, message)
 }
 
-func (c *Client) processMessage(session *Session, message *tgbotapi.Message) {
+func (c *Client[USERDATA]) processMessage(session *Session[USERDATA], message *tgbotapi.Message) {
 	if session.User.Blocked {
 		session.User.Blocked = false
-		c.Firebase.updateUser(session.User)
+		c.Firebase.UpdateUser(session.User)
 	}
 
 	if c.Handlers.RawMessageHandler != nil && c.Handlers.RawMessageHandler(*session, *message) {
@@ -242,7 +242,7 @@ func (c *Client) processMessage(session *Session, message *tgbotapi.Message) {
 	}
 }
 
-func (c *Client) processCommand(session *Session, command string, args string) {
+func (c *Client[USERDATA]) processCommand(session *Session[USERDATA], command string, args string) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -258,7 +258,7 @@ func (c *Client) processCommand(session *Session, command string, args string) {
 	}
 }
 
-func (c *Client) processText(session *Session, text string) {
+func (c *Client[USERDATA]) processText(session *Session[USERDATA], text string) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 

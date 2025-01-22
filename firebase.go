@@ -9,14 +9,14 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-type Firebase struct {
+type Firebase[USERDATA interface{}] struct {
 	Firestore *firestore.Client
 	Database  *db.Client
 	Context   context.Context
 }
 
-func (fb *Firebase) getUsers() ([]*User, error) {
-	users := make([]*User, 0)
+func (fb *Firebase[USERDATA]) GetUsers() ([]*User[USERDATA], error) {
+	users := make([]*User[USERDATA], 0)
 
 	iter := fb.Firestore.Collection("users").Documents(fb.Context)
 	for {
@@ -28,7 +28,7 @@ func (fb *Firebase) getUsers() ([]*User, error) {
 			return nil, err
 		}
 
-		var user User
+		var user User[USERDATA]
 		doc.DataTo(&user)
 		users = append(users, &user)
 	}
@@ -36,7 +36,7 @@ func (fb *Firebase) getUsers() ([]*User, error) {
 	return users, nil
 }
 
-func (fb *Firebase) getUser(id int64) (*User, error) {
+func (fb *Firebase[USERDATA]) GetUser(id int64) (*User[USERDATA], error) {
 	iter := fb.Firestore.Collection("users").Where("id", "==", id).Documents(fb.Context)
 
 	doc, err := iter.Next()
@@ -47,12 +47,12 @@ func (fb *Firebase) getUser(id int64) (*User, error) {
 		return nil, err
 	}
 
-	var user *User
+	var user *User[USERDATA]
 	err = doc.DataTo(&user)
 	return user, err
 }
 
-func (fb *Firebase) updateUser(user *User) error {
+func (fb *Firebase[USERDATA]) UpdateUser(user *User[USERDATA]) error {
 	id := strconv.FormatInt(user.ID, 10)
 
 	_, err := fb.Firestore.Collection("users").Doc(id).Set(fb.Context, user)

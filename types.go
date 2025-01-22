@@ -1,8 +1,9 @@
 package tgbot
 
-type User struct {
-	ID      int64 `firestore:"id"`
-	Blocked bool  `firestore:"blocked"`
+type User[USERDATA interface{}] struct {
+	ID       int64    `firestore:"id"`
+	Blocked  bool     `firestore:"blocked"`
+	UserData USERDATA `firestore:"userdata"`
 }
 
 type Texts struct {
