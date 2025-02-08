@@ -21,11 +21,7 @@ func NewBot[USERDATA any](config Config, delegate ClientDelegate[USERDATA]) *TgB
 	}
 }
 
-func (tgbot *TgBot[USERDATA]) RegisterRawMessageHandler(handler func(*Session[USERDATA], tgbotapi.Message) bool) {
-	tgbot.Client.registerRawMessageHandler(handler)
-}
-
-func (tgbot *TgBot[USERDATA]) RegisterTextHandler(handler func(*Session[USERDATA], string)) {
+func (tgbot *TgBot[USERDATA]) RegisterTextHandler(handler func(*Session[USERDATA], *tgbotapi.Message)) {
 	tgbot.Client.registerTextHandler(handler)
 }
 
@@ -33,7 +29,7 @@ func (tgbot *TgBot[USERDATA]) RegisterReloadCommandHandler(handler func()) {
 	tgbot.Client.registerReloadCommandHandler(handler)
 }
 
-func (tgbot *TgBot[USERDATA]) RegisterCustomCommandHandler(cmd string, handler func(*Session[USERDATA], string) bool) {
+func (tgbot *TgBot[USERDATA]) RegisterCustomCommandHandler(cmd string, handler func(*Session[USERDATA], *tgbotapi.Message) bool) {
 	tgbot.Client.registerCustomCommandHandler(cmd, handler)
 }
 

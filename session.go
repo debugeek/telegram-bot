@@ -48,6 +48,18 @@ func (s *Session[USERDATA]) ReplyText(text string, replyToMessageID int) error {
 	return s.SendMessage(message)
 }
 
+func (s *Session[USERDATA]) ReplyTextUsingParseMode(text string, replyToMessageID int, parseMode string) error {
+	message := tgbotapi.MessageConfig{
+		BaseChat: tgbotapi.BaseChat{
+			ChatID:           s.ID,
+			ReplyToMessageID: replyToMessageID,
+		},
+		Text:      text,
+		ParseMode: parseMode,
+	}
+	return s.SendMessage(message)
+}
+
 func (s *Session[USERDATA]) SendImage(file *os.File, name string) error {
 	message := tgbotapi.NewPhotoUpload(s.User.ID, tgbotapi.FileReader{
 		Name:   name,
