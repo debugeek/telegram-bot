@@ -12,11 +12,15 @@ import (
 	"google.golang.org/api/option"
 )
 
+type ClientDelegate[USERDATA any] interface {
+	DidLoadUser(*Session[USERDATA], *User[USERDATA])
+}
+
 type Handlers[USERDATA any] struct {
-	RawMessageHandler     func(Session[USERDATA], tgbotapi.Message) bool
-	TextHandler           func(Session[USERDATA], string)
+	RawMessageHandler     func(*Session[USERDATA], tgbotapi.Message) bool
+	TextHandler           func(*Session[USERDATA], string)
 	ReloadCommandHandler  func()
-	CustomCommandHandlers map[string]func(Session[USERDATA], string) bool
+	CustomCommandHandlers map[string]func(*Session[USERDATA], string) bool
 }
 
 type Client[USERDATA any] struct {
@@ -26,14 +30,16 @@ type Client[USERDATA any] struct {
 	Sessions map[int64]*Session[USERDATA]
 	Handlers Handlers[USERDATA]
 	mu       sync.RWMutex
+	delegate ClientDelegate[USERDATA]
 }
 
-func newClient[USERDATA any]() *Client[USERDATA] {
+func newClient[USERDATA any](delegate ClientDelegate[USERDATA]) *Client[USERDATA] {
 	return &Client[USERDATA]{
 		Sessions: make(map[int64]*Session[USERDATA]),
 		Handlers: Handlers[USERDATA]{
-			CustomCommandHandlers: make(map[string]func(Session[USERDATA], string) bool),
+			CustomCommandHandlers: make(map[string]func(*Session[USERDATA], string) bool),
 		},
+		delegate: delegate,
 	}
 }
 
@@ -96,6 +102,8 @@ func (c *Client[USERDATA]) start() error {
 			client: c,
 		}
 		c.insertSession(session)
+
+		c.delegate.DidLoadUser(session, user)
 	}
 
 	c.reload()
@@ -129,13 +137,13 @@ func (c *Client[USERDATA]) reload() error {
 	return nil
 }
 
-func (c *Client[USERDATA]) registerRawMessageHandler(handler func(Session[USERDATA], tgbotapi.Message) bool) {
+func (c *Client[USERDATA]) registerRawMessageHandler(handler func(*Session[USERDATA], tgbotapi.Message) bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Handlers.RawMessageHandler = handler
 }
 
-func (c *Client[USERDATA]) registerTextHandler(handler func(Session[USERDATA], string)) {
+func (c *Client[USERDATA]) registerTextHandler(handler func(*Session[USERDATA], string)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Handlers.TextHandler = handler
@@ -147,7 +155,7 @@ func (c *Client[USERDATA]) registerReloadCommandHandler(handler func()) {
 	c.Handlers.ReloadCommandHandler = handler
 }
 
-func (c *Client[USERDATA]) registerCustomCommandHandler(cmd string, handler func(Session[USERDATA], string) bool) {
+func (c *Client[USERDATA]) registerCustomCommandHandler(cmd string, handler func(*Session[USERDATA], string) bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Handlers.CustomCommandHandlers[cmd] = handler
@@ -206,6 +214,8 @@ func (c *Client[USERDATA]) processUpdate(update tgbotapi.Update) {
 			client: c,
 		}
 		c.insertSession(session)
+
+		c.delegate.DidLoadUser(session, user)
 	}
 
 	c.processMessage(session, message)
@@ -217,7 +227,7 @@ func (c *Client[USERDATA]) processMessage(session *Session[USERDATA], message *t
 		c.Firebase.UpdateUser(session.User)
 	}
 
-	if c.Handlers.RawMessageHandler != nil && c.Handlers.RawMessageHandler(*session, *message) {
+	if c.Handlers.RawMessageHandler != nil && c.Handlers.RawMessageHandler(session, *message) {
 		return
 	}
 
@@ -251,7 +261,7 @@ func (c *Client[USERDATA]) processCommand(session *Session[USERDATA], command st
 		return
 	}
 
-	if handler(*session, args) {
+	if handler(session, args) {
 		session.command = ""
 	} else {
 		session.command = command
@@ -264,6 +274,6 @@ func (c *Client[USERDATA]) processText(session *Session[USERDATA], text string) 
 
 	handler := c.Handlers.TextHandler
 	if handler != nil {
-		handler(*session, text)
+		handler(session, text)
 	}
 }

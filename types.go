@@ -1,6 +1,6 @@
 package tgbot
 
-type User[USERDATA interface{}] struct {
+type User[USERDATA any] struct {
 	ID       int64    `firestore:"id"`
 	Blocked  bool     `firestore:"blocked"`
 	UserData USERDATA `firestore:"userdata"`

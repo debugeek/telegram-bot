@@ -9,7 +9,7 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-type Firebase[USERDATA interface{}] struct {
+type Firebase[USERDATA any] struct {
 	Firestore *firestore.Client
 	Database  *db.Client
 	Context   context.Context
