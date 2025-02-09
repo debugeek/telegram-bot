@@ -25,12 +25,8 @@ func (tgbot *TgBot[USERDATA]) RegisterTextHandler(handler func(*Session[USERDATA
 	tgbot.Client.registerTextHandler(handler)
 }
 
-func (tgbot *TgBot[USERDATA]) RegisterReloadCommandHandler(handler func()) {
-	tgbot.Client.registerReloadCommandHandler(handler)
-}
-
-func (tgbot *TgBot[USERDATA]) RegisterCustomCommandHandler(cmd string, handler func(*Session[USERDATA], *tgbotapi.Message) bool) {
-	tgbot.Client.registerCustomCommandHandler(cmd, handler)
+func (tgbot *TgBot[USERDATA]) RegisterCommandHandler(cmd string, handler func(*Session[USERDATA], string, *tgbotapi.Message) CmdResult) {
+	tgbot.Client.registerCommandHandler(cmd, handler)
 }
 
 func (tgbot *TgBot[USERDATA]) Start() error {

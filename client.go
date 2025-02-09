@@ -17,9 +17,8 @@ type ClientDelegate[USERDATA any] interface {
 }
 
 type Handlers[USERDATA any] struct {
-	ReloadCommandHandler  func()
-	TextHandler           func(*Session[USERDATA], *tgbotapi.Message)
-	CustomCommandHandlers map[string]func(*Session[USERDATA], *tgbotapi.Message) bool
+	TextHandler     func(*Session[USERDATA], *tgbotapi.Message)
+	CommandHandlers map[string]func(*Session[USERDATA], string, *tgbotapi.Message) CmdResult
 }
 
 type Client[USERDATA any] struct {
@@ -36,7 +35,7 @@ func newClient[USERDATA any](delegate ClientDelegate[USERDATA]) *Client[USERDATA
 	return &Client[USERDATA]{
 		Sessions: make(map[int64]*Session[USERDATA]),
 		Handlers: Handlers[USERDATA]{
-			CustomCommandHandlers: make(map[string]func(*Session[USERDATA], *tgbotapi.Message) bool),
+			CommandHandlers: make(map[string]func(*Session[USERDATA], string, *tgbotapi.Message) CmdResult),
 		},
 		delegate: delegate,
 	}
@@ -128,11 +127,6 @@ func (c *Client[USERDATA]) reload() error {
 		}
 	}
 	c.CCMS = CCMS
-
-	if c.Handlers.ReloadCommandHandler != nil {
-		c.Handlers.ReloadCommandHandler()
-	}
-
 	return nil
 }
 
@@ -142,16 +136,10 @@ func (c *Client[USERDATA]) registerTextHandler(handler func(*Session[USERDATA], 
 	c.Handlers.TextHandler = handler
 }
 
-func (c *Client[USERDATA]) registerReloadCommandHandler(handler func()) {
+func (c *Client[USERDATA]) registerCommandHandler(cmd string, handler func(*Session[USERDATA], string, *tgbotapi.Message) CmdResult) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.Handlers.ReloadCommandHandler = handler
-}
-
-func (c *Client[USERDATA]) registerCustomCommandHandler(cmd string, handler func(*Session[USERDATA], *tgbotapi.Message) bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.Handlers.CustomCommandHandlers[cmd] = handler
+	c.Handlers.CommandHandlers[cmd] = handler
 }
 
 func (c *Client[USERDATA]) runLoop() {
@@ -221,38 +209,38 @@ func (c *Client[USERDATA]) processMessage(session *Session[USERDATA], message *t
 	}
 
 	if message.IsCommand() {
-		switch message.Command() {
-		case CmdStart:
-			session.SendFormattedText("Greetings.", CmdStart)
-
-		case CmdReload:
-			if _, rv := c.CCMS.Admins[message.Chat.ID]; rv {
-				c.reload()
-				session.SendText("Done.")
-			}
-
-		default:
-			c.processCommand(session, message.Command(), message)
-		}
+		c.processCommand(session, message.Command(), message.CommandArguments(), message)
 	} else if session.command != "" {
-		c.processCommand(session, session.command, message)
+		c.processCommand(session, session.command, message.Text, message)
 	} else {
 		c.processText(session, message)
 	}
 }
 
-func (c *Client[USERDATA]) processCommand(session *Session[USERDATA], command string, message *tgbotapi.Message) {
+func (c *Client[USERDATA]) processCommand(session *Session[USERDATA], command string, args string, message *tgbotapi.Message) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	handler, exists := c.Handlers.CustomCommandHandlers[command]
+	handler, exists := c.Handlers.CommandHandlers[command]
 	if !exists {
 		return
 	}
 
-	if handler(session, message) {
+	result := handler(session, args, message)
+	switch result {
+	case CmdResultProcessed:
 		session.command = ""
-	} else {
+	case CmdResultContinue:
+		switch command {
+		case CmdStart:
+			session.SendFormattedText("Greetings.", CmdStart)
+		case CmdReload:
+			if _, rv := c.CCMS.Admins[message.Chat.ID]; rv {
+				c.reload()
+				session.SendText("Done.")
+			}
+		}
+	case CmdResultWaitingForInput:
 		session.command = command
 	}
 }

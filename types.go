@@ -25,3 +25,11 @@ const (
 	CmdStart  = "start"
 	CmdReload = "reload"
 )
+
+type CmdResult int
+
+const (
+	CmdResultProcessed CmdResult = iota
+	CmdResultContinue
+	CmdResultWaitingForInput
+)
