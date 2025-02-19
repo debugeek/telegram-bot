@@ -30,6 +30,5 @@ type CmdResult int
 
 const (
 	CmdResultProcessed CmdResult = iota
-	CmdResultContinue
 	CmdResultWaitingForInput
 )

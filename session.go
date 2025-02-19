@@ -108,6 +108,18 @@ func (s *Session[USERDATA]) SendFormattedText(text string, promptKey string) err
 	return s.SendText(text)
 }
 
+func (s *Session[USERDATA]) ReplyFormattedText(text string, promptKey string, replyToMessageID int) error {
+	if text == "" {
+		return nil
+	}
+
+	if promptText := s.client.CCMS.Texts.Prompts[promptKey]; promptText != "" {
+		text = strings.Join([]string{text, promptText}, "\n\n")
+	}
+
+	return s.ReplyText(text, replyToMessageID)
+}
+
 func (s *Session[USERDATA]) SendFormattedTextUsingParseMode(text string, promptKey string, parseMode string) error {
 	if text == "" {
 		return nil
