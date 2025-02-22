@@ -17,7 +17,7 @@ type ClientDelegate[USERDATA any] interface {
 }
 
 type Handlers[USERDATA any] struct {
-	TextHandler     func(*Session[USERDATA], *tgbotapi.Message)
+	TextHandler     func(*Session[USERDATA], string, *tgbotapi.Message)
 	CommandHandlers map[string]func(*Session[USERDATA], string, *tgbotapi.Message) CmdResult
 }
 
@@ -130,7 +130,7 @@ func (c *Client[USERDATA]) reload() error {
 	return nil
 }
 
-func (c *Client[USERDATA]) registerTextHandler(handler func(*Session[USERDATA], *tgbotapi.Message)) {
+func (c *Client[USERDATA]) registerTextHandler(handler func(*Session[USERDATA], string, *tgbotapi.Message)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Handlers.TextHandler = handler
@@ -252,6 +252,6 @@ func (c *Client[USERDATA]) processText(session *Session[USERDATA], message *tgbo
 
 	handler := c.Handlers.TextHandler
 	if handler != nil {
-		handler(session, message)
+		handler(session, message.Text, message)
 	}
 }

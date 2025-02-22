@@ -21,7 +21,7 @@ func NewBot[USERDATA any](config Config, delegate ClientDelegate[USERDATA]) *TgB
 	}
 }
 
-func (tgbot *TgBot[USERDATA]) RegisterTextHandler(handler func(*Session[USERDATA], *tgbotapi.Message)) {
+func (tgbot *TgBot[USERDATA]) RegisterTextHandler(handler func(*Session[USERDATA], string, *tgbotapi.Message)) {
 	tgbot.Client.registerTextHandler(handler)
 }
 
