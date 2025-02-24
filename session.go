@@ -8,10 +8,21 @@ import (
 )
 
 type Session[USERDATA any] struct {
-	ID      int64
-	User    *User[USERDATA]
-	command string
-	client  *Client[USERDATA]
+	ID             int64
+	User           *User[USERDATA]
+	CommandSession *CommandSession
+	client         *Client[USERDATA]
+}
+
+func newSession[USERDATA any](user *User[USERDATA], client *Client[USERDATA]) *Session[USERDATA] {
+	return &Session[USERDATA]{
+		ID:   user.ID,
+		User: user,
+		CommandSession: &CommandSession{
+			Args: make(map[string]any),
+		},
+		client: client,
+	}
 }
 
 func (s *Session[USERDATA]) SendText(text string) error {

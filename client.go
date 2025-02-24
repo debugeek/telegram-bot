@@ -94,11 +94,7 @@ func (c *Client[USERDATA]) start() error {
 	}
 
 	for _, user := range users {
-		session := &Session[USERDATA]{
-			ID:     user.ID,
-			User:   user,
-			client: c,
-		}
+		session := newSession[USERDATA](user, c)
 		c.insertSession(session)
 
 		c.delegate.DidLoadUser(session, user)
@@ -189,11 +185,7 @@ func (c *Client[USERDATA]) processUpdate(update tgbotapi.Update) {
 			return
 		}
 
-		session = &Session[USERDATA]{
-			ID:     id,
-			User:   user,
-			client: c,
-		}
+		session := newSession[USERDATA](user, c)
 		c.insertSession(session)
 
 		c.delegate.DidLoadUser(session, user)
@@ -209,11 +201,14 @@ func (c *Client[USERDATA]) processMessage(session *Session[USERDATA], message *t
 	}
 
 	if message.IsCommand() {
+		session.CommandSession.Command = message.Command()
+		session.CommandSession.Stage = ""
+		session.CommandSession.Args = make(map[string]any)
 		c.processCommand(session, message.Command(), message.CommandArguments(), message)
-	} else if session.command != "" {
-		c.processCommand(session, session.command, message.Text, message)
+	} else if session.CommandSession.Command != "" {
+		c.processCommand(session, session.CommandSession.Command, message.Text, message)
 	} else {
-		c.processText(session, message)
+		c.processText(session, message.Text, message)
 	}
 }
 
@@ -237,21 +232,19 @@ func (c *Client[USERDATA]) processCommand(session *Session[USERDATA], command st
 		return
 	}
 
-	result := handler(session, args, message)
-	switch result {
-	case CmdResultProcessed:
-		session.command = ""
-	case CmdResultWaitingForInput:
-		session.command = command
+	if handler(session, args, message) == CmdResultProcessed {
+		session.CommandSession.Command = ""
+		session.CommandSession.Stage = ""
+		session.CommandSession.Args = make(map[string]any)
 	}
 }
 
-func (c *Client[USERDATA]) processText(session *Session[USERDATA], message *tgbotapi.Message) {
+func (c *Client[USERDATA]) processText(session *Session[USERDATA], text string, message *tgbotapi.Message) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	handler := c.Handlers.TextHandler
 	if handler != nil {
-		handler(session, message.Text, message)
+		handler(session, text, message)
 	}
 }

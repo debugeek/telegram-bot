@@ -16,6 +16,12 @@ type CCMS struct {
 	Texts  Texts            `json:"texts"`
 }
 
+type CommandSession struct {
+	Command string
+	Stage   string
+	Args    map[string]any
+}
+
 const (
 	errChatNotFound = "Bad Request: chat not found"
 	errNotMember    = "Forbidden: bot is not a member of the channel chat"
