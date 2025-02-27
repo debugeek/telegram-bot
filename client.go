@@ -201,9 +201,6 @@ func (c *Client[USERDATA]) processMessage(session *Session[USERDATA], message *t
 	}
 
 	if message.IsCommand() {
-		session.CommandSession.Command = message.Command()
-		session.CommandSession.Stage = ""
-		session.CommandSession.Args = make(map[string]any)
 		c.processCommand(session, message.Command(), message.CommandArguments(), message)
 	} else if session.CommandSession.Command != "" {
 		c.processCommand(session, session.CommandSession.Command, message.Text, message)
@@ -232,7 +229,13 @@ func (c *Client[USERDATA]) processCommand(session *Session[USERDATA], command st
 		return
 	}
 
-	if handler(session, args, message) == CmdResultProcessed {
+	if command != session.CommandSession.Command {
+		session.CommandSession.Command = command
+		session.CommandSession.Stage = ""
+		session.CommandSession.Args = make(map[string]any)
+	}
+	result := handler(session, args, message)
+	if result == CmdResultProcessed {
 		session.CommandSession.Command = ""
 		session.CommandSession.Stage = ""
 		session.CommandSession.Args = make(map[string]any)
