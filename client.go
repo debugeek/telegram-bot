@@ -13,37 +13,37 @@ import (
 	"google.golang.org/api/option"
 )
 
-type ClientDelegate[USERDATA any] interface {
-	DidLoadUser(*Session[USERDATA], *User[USERDATA])
-	DidReload()
+type ClientDelegate[BOTDATA any, USERDATA any] interface {
+	DidLoadUser(*Session[BOTDATA, USERDATA], *User[USERDATA])
+	DidLoadPreference()
 }
 
-type Handlers[USERDATA any] struct {
-	TextHandler     func(*Session[USERDATA], string, *tgbotapi.Message)
-	CommandHandlers map[string]func(*Session[USERDATA], string, *tgbotapi.Message) CmdResult
+type Handlers[BOTDATA any, USERDATA any] struct {
+	TextHandler     func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message)
+	CommandHandlers map[string]func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message) CmdResult
 }
 
-type Client[USERDATA any] struct {
-	BotAPI   *tgbotapi.BotAPI
-	Firebase Firebase[USERDATA]
-	CCMS     CCMS
-	Sessions map[int64]*Session[USERDATA]
-	Handlers Handlers[USERDATA]
-	mu       sync.RWMutex
-	delegate ClientDelegate[USERDATA]
+type Client[BOTDATA any, USERDATA any] struct {
+	BotAPI     *tgbotapi.BotAPI
+	Firebase   Firebase[BOTDATA, USERDATA]
+	Preference Preference[BOTDATA]
+	Sessions   map[int64]*Session[BOTDATA, USERDATA]
+	Handlers   Handlers[BOTDATA, USERDATA]
+	mu         sync.RWMutex
+	delegate   ClientDelegate[BOTDATA, USERDATA]
 }
 
-func newClient[USERDATA any](delegate ClientDelegate[USERDATA]) *Client[USERDATA] {
-	return &Client[USERDATA]{
-		Sessions: make(map[int64]*Session[USERDATA]),
-		Handlers: Handlers[USERDATA]{
-			CommandHandlers: make(map[string]func(*Session[USERDATA], string, *tgbotapi.Message) CmdResult),
+func newClient[BOTDATA any, USERDATA any](delegate ClientDelegate[BOTDATA, USERDATA]) *Client[BOTDATA, USERDATA] {
+	return &Client[BOTDATA, USERDATA]{
+		Sessions: make(map[int64]*Session[BOTDATA, USERDATA]),
+		Handlers: Handlers[BOTDATA, USERDATA]{
+			CommandHandlers: make(map[string]func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message) CmdResult),
 		},
 		delegate: delegate,
 	}
 }
 
-func (c *Client[USERDATA]) initFirebase(credential []byte, databaseURL string) error {
+func (c *Client[BOTDATA, USERDATA]) initFirebase(credential []byte, databaseURL string) error {
 	context := context.Background()
 	opt := option.WithCredentialsJSON(credential)
 	conf := &firebase.Config{
@@ -64,7 +64,7 @@ func (c *Client[USERDATA]) initFirebase(credential []byte, databaseURL string) e
 		return err
 	}
 
-	firebase := Firebase[USERDATA]{
+	firebase := Firebase[BOTDATA, USERDATA]{
 		Firestore: firestore,
 		Database:  database,
 		Context:   context,
@@ -74,7 +74,7 @@ func (c *Client[USERDATA]) initFirebase(credential []byte, databaseURL string) e
 	return nil
 }
 
-func (c *Client[USERDATA]) initBotAPI(token string) error {
+func (c *Client[BOTDATA, USERDATA]) initBotAPI(token string) error {
 	botAPI, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return err
@@ -89,14 +89,14 @@ func (c *Client[USERDATA]) initBotAPI(token string) error {
 	return nil
 }
 
-func (c *Client[USERDATA]) start() error {
+func (c *Client[BOTDATA, USERDATA]) start() error {
 	users, err := c.Firebase.GetUsers()
 	if err != nil {
 		return err
 	}
 
 	for _, user := range users {
-		session := newSession[USERDATA](user, c)
+		session := newSession(user, c)
 		c.insertSession(session)
 
 		c.delegate.DidLoadUser(session, user)
@@ -109,38 +109,39 @@ func (c *Client[USERDATA]) start() error {
 	return nil
 }
 
-func (c *Client[USERDATA]) reload() error {
-	var CCMS CCMS
-	if err := c.Firebase.Database.NewRef("/ccms").Get(c.Firebase.Context, &CCMS); err != nil {
+func (c *Client[BOTDATA, USERDATA]) reload() error {
+	var preference Preference[BOTDATA]
+	if err := c.Firebase.Database.NewRef("/preference").Get(c.Firebase.Context, &preference); err != nil {
 		return err
 	}
-	for key, val := range CCMS.Texts.Localizations {
+	for key, val := range preference.Texts.Localizations {
 		if bytes, err := base64.StdEncoding.DecodeString(val); err == nil {
-			CCMS.Texts.Localizations[key] = string(bytes)
+			preference.Texts.Localizations[key] = string(bytes)
 		}
 	}
-	for key, val := range CCMS.Texts.Prompts {
+	for key, val := range preference.Texts.Prompts {
 		if bytes, err := base64.StdEncoding.DecodeString(val); err == nil {
-			CCMS.Texts.Prompts[key] = string(bytes)
+			preference.Texts.Prompts[key] = string(bytes)
 		}
 	}
-	c.CCMS = CCMS
+	c.Preference = preference
+	c.delegate.DidLoadPreference()
 	return nil
 }
 
-func (c *Client[USERDATA]) registerTextHandler(handler func(*Session[USERDATA], string, *tgbotapi.Message)) {
+func (c *Client[BOTDATA, USERDATA]) registerTextHandler(handler func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Handlers.TextHandler = handler
 }
 
-func (c *Client[USERDATA]) registerCommandHandler(cmd string, handler func(*Session[USERDATA], string, *tgbotapi.Message) CmdResult) {
+func (c *Client[BOTDATA, USERDATA]) registerCommandHandler(cmd string, handler func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message) CmdResult) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Handlers.CommandHandlers[cmd] = handler
 }
 
-func (c *Client[USERDATA]) runLoop() {
+func (c *Client[BOTDATA, USERDATA]) runLoop() {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 10
 
@@ -158,15 +159,15 @@ func (c *Client[USERDATA]) runLoop() {
 	}
 }
 
-func (c *Client[USERDATA]) getSession(id int64) *Session[USERDATA] {
+func (c *Client[BOTDATA, USERDATA]) getSession(id int64) *Session[BOTDATA, USERDATA] {
 	return c.Sessions[id]
 }
 
-func (c *Client[USERDATA]) insertSession(session *Session[USERDATA]) {
+func (c *Client[BOTDATA, USERDATA]) insertSession(session *Session[BOTDATA, USERDATA]) {
 	c.Sessions[session.ID] = session
 }
 
-func (c *Client[USERDATA]) processUpdate(update tgbotapi.Update) {
+func (c *Client[BOTDATA, USERDATA]) processUpdate(update tgbotapi.Update) {
 	var message *tgbotapi.Message
 	if update.Message != nil {
 		message = update.Message
@@ -187,7 +188,7 @@ func (c *Client[USERDATA]) processUpdate(update tgbotapi.Update) {
 			return
 		}
 
-		session := newSession[USERDATA](user, c)
+		session := newSession[BOTDATA, USERDATA](user, c)
 		c.insertSession(session)
 
 		c.delegate.DidLoadUser(session, user)
@@ -196,7 +197,7 @@ func (c *Client[USERDATA]) processUpdate(update tgbotapi.Update) {
 	c.processMessage(session, message)
 }
 
-func (c *Client[USERDATA]) processMessage(session *Session[USERDATA], message *tgbotapi.Message) {
+func (c *Client[BOTDATA, USERDATA]) processMessage(session *Session[BOTDATA, USERDATA], message *tgbotapi.Message) {
 	if session.User.Blocked {
 		session.User.Blocked = false
 		c.Firebase.UpdateUser(session.User)
@@ -211,7 +212,7 @@ func (c *Client[USERDATA]) processMessage(session *Session[USERDATA], message *t
 	}
 }
 
-func (c *Client[USERDATA]) processCommand(session *Session[USERDATA], command string, args string, message *tgbotapi.Message) {
+func (c *Client[BOTDATA, USERDATA]) processCommand(session *Session[BOTDATA, USERDATA], command string, args string, message *tgbotapi.Message) {
 	if command == CmdStart {
 		session.SendTextWithConfig("Greetings.", MessageConfig{
 			PromptKey:        CmdStart,
@@ -219,14 +220,13 @@ func (c *Client[USERDATA]) processCommand(session *Session[USERDATA], command st
 		})
 		return
 	} else if command == CmdBotReload {
-		if _, rv := c.CCMS.Admins[message.Chat.ID]; rv {
+		if _, rv := c.Preference.Admins[message.Chat.ID]; rv {
 			c.reload()
-			c.delegate.DidReload()
 			session.ReplyText("Done.", message.MessageID)
 		}
 		return
 	} else if command == CmdBotStat {
-		if _, rv := c.CCMS.Admins[message.Chat.ID]; rv {
+		if _, rv := c.Preference.Admins[message.Chat.ID]; rv {
 			session.ReplyText(fmt.Sprintf("Total Users: %d", len(c.Sessions)), message.MessageID)
 		}
 		return
@@ -253,7 +253,7 @@ func (c *Client[USERDATA]) processCommand(session *Session[USERDATA], command st
 	}
 }
 
-func (c *Client[USERDATA]) processText(session *Session[USERDATA], text string, message *tgbotapi.Message) {
+func (c *Client[BOTDATA, USERDATA]) processText(session *Session[BOTDATA, USERDATA], text string, message *tgbotapi.Message) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 

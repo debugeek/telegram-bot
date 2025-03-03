@@ -6,14 +6,15 @@ type User[USERDATA any] struct {
 	UserData USERDATA `firestore:"userdata"`
 }
 
+type Preference[BOTDATA any] struct {
+	Admins  map[int64]string `json:"admins"`
+	Texts   Texts            `json:"texts"`
+	BotData BOTDATA          `json:"botdata"`
+}
+
 type Texts struct {
 	Prompts       map[string]string `json:"prompts"`
 	Localizations map[string]string `json:"localizations"`
-}
-
-type CCMS struct {
-	Admins map[int64]string `json:"admins"`
-	Texts  Texts            `json:"texts"`
 }
 
 type CommandSession struct {

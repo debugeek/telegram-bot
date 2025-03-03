@@ -21,15 +21,15 @@ type MessageConfig struct {
 	PromptKey        string
 }
 
-type Session[USERDATA any] struct {
+type Session[BOTDATA, USERDATA any] struct {
 	ID             int64
 	User           *User[USERDATA]
 	CommandSession *CommandSession
-	client         *Client[USERDATA]
+	client         *Client[BOTDATA, USERDATA]
 }
 
-func newSession[USERDATA any](user *User[USERDATA], client *Client[USERDATA]) *Session[USERDATA] {
-	return &Session[USERDATA]{
+func newSession[BOTDATA any, USERDATA any](user *User[USERDATA], client *Client[BOTDATA, USERDATA]) *Session[BOTDATA, USERDATA] {
+	return &Session[BOTDATA, USERDATA]{
 		ID:   user.ID,
 		User: user,
 		CommandSession: &CommandSession{
@@ -39,18 +39,18 @@ func newSession[USERDATA any](user *User[USERDATA], client *Client[USERDATA]) *S
 	}
 }
 
-func (s *Session[USERDATA]) SendText(text string) error {
+func (s *Session[BOTDATA, USERDATA]) SendText(text string) error {
 	return s.SendTextWithConfig(text, MessageConfig{})
 }
 
-func (s *Session[USERDATA]) ReplyText(text string, replyToMessageID int) error {
+func (s *Session[BOTDATA, USERDATA]) ReplyText(text string, replyToMessageID int) error {
 	return s.SendTextWithConfig(text, MessageConfig{
 		ReplyToMessageID: replyToMessageID,
 	})
 }
 
-func (s *Session[USERDATA]) SendTextWithConfig(text string, config MessageConfig) error {
-	if promptText := s.client.CCMS.Texts.Prompts[config.PromptKey]; promptText != "" {
+func (s *Session[BOTDATA, USERDATA]) SendTextWithConfig(text string, config MessageConfig) error {
+	if promptText := s.client.Preference.Texts.Prompts[config.PromptKey]; promptText != "" {
 		text = strings.Join([]string{text, promptText}, "\n\n")
 	}
 
@@ -74,7 +74,7 @@ func (s *Session[USERDATA]) SendTextWithConfig(text string, config MessageConfig
 	return s.SendMessage(message)
 }
 
-func (s *Session[USERDATA]) SendImage(file *os.File, name string) error {
+func (s *Session[BOTDATA, USERDATA]) SendImage(file *os.File, name string) error {
 	message := tgbotapi.NewPhotoUpload(s.User.ID, tgbotapi.FileReader{
 		Name:   name,
 		Reader: file,
@@ -83,7 +83,7 @@ func (s *Session[USERDATA]) SendImage(file *os.File, name string) error {
 	return s.SendMessage(message)
 }
 
-func (s *Session[USERDATA]) SendVideo(file *os.File, name string) error {
+func (s *Session[BOTDATA, USERDATA]) SendVideo(file *os.File, name string) error {
 	message := tgbotapi.NewVideoUpload(s.User.ID, tgbotapi.FileReader{
 		Name:   name,
 		Reader: file,
@@ -92,7 +92,7 @@ func (s *Session[USERDATA]) SendVideo(file *os.File, name string) error {
 	return s.SendMessage(message)
 }
 
-func (s *Session[USERDATA]) SendAudio(file *os.File, name string) error {
+func (s *Session[BOTDATA, USERDATA]) SendAudio(file *os.File, name string) error {
 	message := tgbotapi.NewAudioUpload(s.User.ID, tgbotapi.FileReader{
 		Name:   name,
 		Reader: file,
@@ -101,7 +101,7 @@ func (s *Session[USERDATA]) SendAudio(file *os.File, name string) error {
 	return s.SendMessage(message)
 }
 
-func (s *Session[USERDATA]) SendFile(file *os.File, name string) error {
+func (s *Session[BOTDATA, USERDATA]) SendFile(file *os.File, name string) error {
 	message := tgbotapi.NewDocumentUpload(s.User.ID, tgbotapi.FileReader{
 		Name:   name,
 		Reader: file,
@@ -110,7 +110,7 @@ func (s *Session[USERDATA]) SendFile(file *os.File, name string) error {
 	return s.SendMessage(message)
 }
 
-func (s *Session[USERDATA]) SendMessage(message tgbotapi.Chattable) error {
+func (s *Session[BOTDATA, USERDATA]) SendMessage(message tgbotapi.Chattable) error {
 	_, err := s.client.BotAPI.Send(message)
 	if err != nil {
 		s.processError(err)
@@ -118,7 +118,7 @@ func (s *Session[USERDATA]) SendMessage(message tgbotapi.Chattable) error {
 	return err
 }
 
-func (s *Session[USERDATA]) processError(err error) {
+func (s *Session[BOTDATA, USERDATA]) processError(err error) {
 	switch err.Error() {
 	case errChatNotFound, errNotMember:
 		s.User.Blocked = true

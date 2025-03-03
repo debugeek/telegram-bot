@@ -2,8 +2,8 @@ package tgbot
 
 import tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 
-type TgBot[USERDATA any] struct {
-	Client *Client[USERDATA]
+type TgBot[BOTDATA any, USERDATA any] struct {
+	Client *Client[BOTDATA, USERDATA]
 }
 
 type Config struct {
@@ -12,23 +12,23 @@ type Config struct {
 	FirebaseDatabaseURL string
 }
 
-func NewBot[USERDATA any](config Config, delegate ClientDelegate[USERDATA]) *TgBot[USERDATA] {
-	client := newClient[USERDATA](delegate)
+func NewBot[BOTDATA any, USERDATA any](config Config, delegate ClientDelegate[BOTDATA, USERDATA]) *TgBot[BOTDATA, USERDATA] {
+	client := newClient(delegate)
 	client.initBotAPI(config.TelegramBotToken)
 	client.initFirebase(config.FirebaseCredential, config.FirebaseDatabaseURL)
-	return &TgBot[USERDATA]{
+	return &TgBot[BOTDATA, USERDATA]{
 		Client: client,
 	}
 }
 
-func (tgbot *TgBot[USERDATA]) RegisterTextHandler(handler func(*Session[USERDATA], string, *tgbotapi.Message)) {
+func (tgbot *TgBot[BOTDATA, USERDATA]) RegisterTextHandler(handler func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message)) {
 	tgbot.Client.registerTextHandler(handler)
 }
 
-func (tgbot *TgBot[USERDATA]) RegisterCommandHandler(cmd string, handler func(*Session[USERDATA], string, *tgbotapi.Message) CmdResult) {
+func (tgbot *TgBot[BOTDATA, USERDATA]) RegisterCommandHandler(cmd string, handler func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message) CmdResult) {
 	tgbot.Client.registerCommandHandler(cmd, handler)
 }
 
-func (tgbot *TgBot[USERDATA]) Start() error {
+func (tgbot *TgBot[BOTDATA, USERDATA]) Start() error {
 	return tgbot.Client.start()
 }
