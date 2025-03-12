@@ -14,6 +14,7 @@ import (
 
 type ClientDelegate[USERDATA any] interface {
 	DidLoadUser(*Session[USERDATA], *User[USERDATA])
+	DidReload()
 }
 
 type Handlers[USERDATA any] struct {
@@ -219,6 +220,7 @@ func (c *Client[USERDATA]) processCommand(session *Session[USERDATA], command st
 	} else if command == CmdReload {
 		if _, rv := c.CCMS.Admins[message.Chat.ID]; rv {
 			c.reload()
+			c.delegate.DidReload()
 			session.ReplyText("Done.", message.MessageID)
 		}
 		return
