@@ -211,7 +211,10 @@ func (c *Client[USERDATA]) processMessage(session *Session[USERDATA], message *t
 
 func (c *Client[USERDATA]) processCommand(session *Session[USERDATA], command string, args string, message *tgbotapi.Message) {
 	if command == CmdStart {
-		session.ReplyFormattedText("Greetings.", CmdStart, message.MessageID)
+		session.SendTextWithConfig("Greetings.", MessageConfig{
+			PromptKey:        CmdStart,
+			ReplyToMessageID: message.MessageID,
+		})
 		return
 	} else if command == CmdReload {
 		if _, rv := c.CCMS.Admins[message.Chat.ID]; rv {

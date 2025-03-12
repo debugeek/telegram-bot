@@ -7,6 +7,12 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
+type MessageConfig struct {
+	ReplyToMessageID int
+	ParseMode        string
+	PromptKey        string
+}
+
 type Session[USERDATA any] struct {
 	ID             int64
 	User           *User[USERDATA]
@@ -26,47 +32,27 @@ func newSession[USERDATA any](user *User[USERDATA], client *Client[USERDATA]) *S
 }
 
 func (s *Session[USERDATA]) SendText(text string) error {
-	message := tgbotapi.MessageConfig{
-		BaseChat: tgbotapi.BaseChat{
-			ChatID:           s.ID,
-			ReplyToMessageID: 0,
-		},
-		Text: text,
-	}
-	return s.SendMessage(message)
-}
-
-func (s *Session[USERDATA]) SendTextUsingParseMode(text string, parseMode string) error {
-	message := tgbotapi.MessageConfig{
-		BaseChat: tgbotapi.BaseChat{
-			ChatID:           s.ID,
-			ReplyToMessageID: 0,
-		},
-		Text:      text,
-		ParseMode: parseMode,
-	}
-	return s.SendMessage(message)
+	return s.SendTextWithConfig(text, MessageConfig{})
 }
 
 func (s *Session[USERDATA]) ReplyText(text string, replyToMessageID int) error {
-	message := tgbotapi.MessageConfig{
-		BaseChat: tgbotapi.BaseChat{
-			ChatID:           s.ID,
-			ReplyToMessageID: replyToMessageID,
-		},
-		Text: text,
-	}
-	return s.SendMessage(message)
+	return s.SendTextWithConfig(text, MessageConfig{
+		ReplyToMessageID: replyToMessageID,
+	})
 }
 
-func (s *Session[USERDATA]) ReplyTextUsingParseMode(text string, replyToMessageID int, parseMode string) error {
+func (s *Session[USERDATA]) SendTextWithConfig(text string, config MessageConfig) error {
+	if promptText := s.client.CCMS.Texts.Prompts[config.PromptKey]; promptText != "" {
+		text = strings.Join([]string{text, promptText}, "\n\n")
+	}
+
 	message := tgbotapi.MessageConfig{
 		BaseChat: tgbotapi.BaseChat{
 			ChatID:           s.ID,
-			ReplyToMessageID: replyToMessageID,
+			ReplyToMessageID: 0,
 		},
 		Text:      text,
-		ParseMode: parseMode,
+		ParseMode: config.ParseMode,
 	}
 	return s.SendMessage(message)
 }
@@ -105,42 +91,6 @@ func (s *Session[USERDATA]) SendFile(file *os.File, name string) error {
 		Size:   -1,
 	})
 	return s.SendMessage(message)
-}
-
-func (s *Session[USERDATA]) SendFormattedText(text string, promptKey string) error {
-	if text == "" {
-		return nil
-	}
-
-	if promptText := s.client.CCMS.Texts.Prompts[promptKey]; promptText != "" {
-		text = strings.Join([]string{text, promptText}, "\n\n")
-	}
-
-	return s.SendText(text)
-}
-
-func (s *Session[USERDATA]) ReplyFormattedText(text string, promptKey string, replyToMessageID int) error {
-	if text == "" {
-		return nil
-	}
-
-	if promptText := s.client.CCMS.Texts.Prompts[promptKey]; promptText != "" {
-		text = strings.Join([]string{text, promptText}, "\n\n")
-	}
-
-	return s.ReplyText(text, replyToMessageID)
-}
-
-func (s *Session[USERDATA]) SendFormattedTextUsingParseMode(text string, promptKey string, parseMode string) error {
-	if text == "" {
-		return nil
-	}
-
-	if promptText := s.client.CCMS.Texts.Prompts[promptKey]; promptText != "" {
-		text = strings.Join([]string{text, promptText}, "\n\n")
-	}
-
-	return s.SendTextUsingParseMode(text, parseMode)
 }
 
 func (s *Session[USERDATA]) SendMessage(message tgbotapi.Chattable) error {
