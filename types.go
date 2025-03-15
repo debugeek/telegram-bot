@@ -28,8 +28,9 @@ const (
 )
 
 const (
-	CmdStart  = "start"
-	CmdReload = "reload"
+	CmdStart     = "start"
+	CmdBotReload = "botreload"
+	CmdBotStat   = "botstat"
 )
 
 type CmdResult int

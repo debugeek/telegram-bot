@@ -3,6 +3,7 @@ package tgbot
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -217,11 +218,16 @@ func (c *Client[USERDATA]) processCommand(session *Session[USERDATA], command st
 			ReplyToMessageID: message.MessageID,
 		})
 		return
-	} else if command == CmdReload {
+	} else if command == CmdBotReload {
 		if _, rv := c.CCMS.Admins[message.Chat.ID]; rv {
 			c.reload()
 			c.delegate.DidReload()
 			session.ReplyText("Done.", message.MessageID)
+		}
+		return
+	} else if command == CmdBotStat {
+		if _, rv := c.CCMS.Admins[message.Chat.ID]; rv {
+			session.ReplyText(fmt.Sprintf("Total Users: %d", len(c.Sessions)), message.MessageID)
 		}
 		return
 	}
