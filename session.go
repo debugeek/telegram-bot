@@ -7,9 +7,17 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
+type ParseMode int
+
+const (
+	ParseModePlain ParseMode = iota
+	ParseModeHTML
+	ParseModeMarkdown
+)
+
 type MessageConfig struct {
 	ReplyToMessageID int
-	ParseMode        string
+	ParseMode        ParseMode
 	PromptKey        string
 }
 
@@ -51,9 +59,18 @@ func (s *Session[USERDATA]) SendTextWithConfig(text string, config MessageConfig
 			ChatID:           s.ID,
 			ReplyToMessageID: 0,
 		},
-		Text:      text,
-		ParseMode: config.ParseMode,
+		Text: text,
 	}
+
+	switch config.ParseMode {
+	case ParseModeHTML:
+		message.ParseMode = tgbotapi.ModeHTML
+	case ParseModeMarkdown:
+		message.ParseMode = tgbotapi.ModeMarkdown
+	default:
+		break
+	}
+
 	return s.SendMessage(message)
 }
 
