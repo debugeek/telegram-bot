@@ -190,7 +190,7 @@ func (c *Client[BOTDATA, USERDATA]) processUpdate(update tgbotapi.Update) {
 			return
 		}
 
-		session := newSession(user, c)
+		session = newSession(user, c)
 		c.insertSession(session)
 
 		c.delegate.DidLoadUser(session, user)
