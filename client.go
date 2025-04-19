@@ -14,6 +14,7 @@ import (
 )
 
 type ClientDelegate[BOTDATA any, USERDATA any] interface {
+	NewUserData() USERDATA
 	DidLoadUser(*Session[BOTDATA, USERDATA], *User[USERDATA])
 	DidLoadPreference()
 }
@@ -182,13 +183,14 @@ func (c *Client[BOTDATA, USERDATA]) processUpdate(update tgbotapi.Update) {
 	session := c.getSession(id)
 	if session == nil {
 		user := &User[USERDATA]{
-			ID: id,
+			ID:       id,
+			UserData: c.delegate.NewUserData(),
 		}
 		if err := c.Firebase.UpdateUser(user); err != nil {
 			return
 		}
 
-		session := newSession[BOTDATA, USERDATA](user, c)
+		session := newSession(user, c)
 		c.insertSession(session)
 
 		c.delegate.DidLoadUser(session, user)
