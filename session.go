@@ -57,7 +57,7 @@ func (s *Session[BOTDATA, USERDATA]) SendTextWithConfig(text string, config Mess
 	message := tgbotapi.MessageConfig{
 		BaseChat: tgbotapi.BaseChat{
 			ChatID:           s.ID,
-			ReplyToMessageID: 0,
+			ReplyToMessageID: config.ReplyToMessageID,
 		},
 		Text: text,
 	}
