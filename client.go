@@ -215,23 +215,45 @@ func (c *Client[BOTDATA, USERDATA]) processMessage(session *Session[BOTDATA, USE
 }
 
 func (c *Client[BOTDATA, USERDATA]) processCommand(session *Session[BOTDATA, USERDATA], command string, args string, message *tgbotapi.Message) {
-	if command == CmdStart {
+	switch command {
+	case CmdStart:
 		session.SendTextWithConfig("Greetings.", MessageConfig{
 			PromptKey:        CmdStart,
 			ReplyToMessageID: message.MessageID,
 		})
 		return
-	} else if command == CmdBotReload {
+	case CmdBotReload:
 		if _, rv := c.Preference.Admins[message.Chat.ID]; rv {
 			c.reload()
 			session.ReplyText("Done.", message.MessageID)
 		}
 		return
-	} else if command == CmdBotStat {
+	case CmdBotStat:
 		if _, rv := c.Preference.Admins[message.Chat.ID]; rv {
 			session.ReplyText(fmt.Sprintf("Total Users: %d", len(c.Sessions)), message.MessageID)
 		}
 		return
+	}
+
+	if c.Preference.OnlyAdminsCanCommandInGroup && (message.Chat.IsSuperGroup() || message.Chat.IsGroup()) {
+		admins, err := c.BotAPI.GetChatAdministrators(tgbotapi.ChatConfig{ChatID: message.Chat.ID})
+		if err != nil {
+			return
+		}
+
+		isAdmin := false
+		for _, admin := range admins {
+			if admin.User.ID == message.From.ID {
+				isAdmin = true
+				break
+			}
+		}
+		if !isAdmin && message.From.ID == GroupAnonymousBot {
+			isAdmin = true
+		}
+		if !isAdmin {
+			return
+		}
 	}
 
 	c.mu.RLock()

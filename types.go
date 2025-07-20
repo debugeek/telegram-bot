@@ -7,9 +7,10 @@ type User[USERDATA any] struct {
 }
 
 type Preference[BOTDATA any] struct {
-	Admins  map[int64]string `json:"admins"`
-	Texts   Texts            `json:"texts"`
-	BotData BOTDATA          `json:"botdata"`
+	Admins                      map[int64]string `json:"admins"`
+	Texts                       Texts            `json:"texts"`
+	BotData                     BOTDATA          `json:"botdata"`
+	OnlyAdminsCanCommandInGroup bool             `json:"onlyAdminsCanCommandInGroup"`
 }
 
 type Texts struct {
@@ -40,3 +41,5 @@ const (
 	CmdResultProcessed CmdResult = iota
 	CmdResultWaitingForInput
 )
+
+var GroupAnonymousBot = 1087968824
