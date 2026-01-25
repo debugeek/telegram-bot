@@ -12,13 +12,14 @@ type Config struct {
 	FirebaseDatabaseURL string
 }
 
-func NewBot[BOTDATA any, USERDATA any](config Config, delegate ClientDelegate[BOTDATA, USERDATA]) *TgBot[BOTDATA, USERDATA] {
-	client := newClient(delegate)
-	client.initBotAPI(config.TelegramBotToken)
-	client.initFirebase(config.FirebaseCredential, config.FirebaseDatabaseURL)
+func NewBot[BOTDATA any, USERDATA any](config Config, delegate ClientDelegate[BOTDATA, USERDATA]) (*TgBot[BOTDATA, USERDATA], error) {
+	client, err := newClient(config, delegate)
+	if err != nil {
+		return nil, err
+	}
 	return &TgBot[BOTDATA, USERDATA]{
 		Client: client,
-	}
+	}, nil
 }
 
 func (tgbot *TgBot[BOTDATA, USERDATA]) RegisterTextHandler(handler func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message)) {
@@ -31,4 +32,8 @@ func (tgbot *TgBot[BOTDATA, USERDATA]) RegisterCommandHandler(cmd string, handle
 
 func (tgbot *TgBot[BOTDATA, USERDATA]) Start() error {
 	return tgbot.Client.start()
+}
+
+func (tgbot *TgBot[BOTDATA, USERDATA]) Stop() {
+	tgbot.Client.stop()
 }

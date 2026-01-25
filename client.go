@@ -25,23 +25,37 @@ type Handlers[BOTDATA any, USERDATA any] struct {
 }
 
 type Client[BOTDATA any, USERDATA any] struct {
-	BotAPI     *tgbotapi.BotAPI
-	Firebase   Firebase[BOTDATA, USERDATA]
-	Preference Preference[BOTDATA]
-	Sessions   map[int64]*Session[BOTDATA, USERDATA]
-	Handlers   Handlers[BOTDATA, USERDATA]
-	mu         sync.RWMutex
-	delegate   ClientDelegate[BOTDATA, USERDATA]
+	BotAPI      *tgbotapi.BotAPI
+	Firebase    Firebase[BOTDATA, USERDATA]
+	Preference  Preference[BOTDATA]
+	Sessions    map[int64]*Session[BOTDATA, USERDATA]
+	Handlers    Handlers[BOTDATA, USERDATA]
+	mu          sync.RWMutex
+	delegate    ClientDelegate[BOTDATA, USERDATA]
+	globalQueue *DispatchQueue
 }
 
-func newClient[BOTDATA any, USERDATA any](delegate ClientDelegate[BOTDATA, USERDATA]) *Client[BOTDATA, USERDATA] {
-	return &Client[BOTDATA, USERDATA]{
+func newClient[BOTDATA any, USERDATA any](config Config, delegate ClientDelegate[BOTDATA, USERDATA]) (*Client[BOTDATA, USERDATA], error) {
+	client := &Client[BOTDATA, USERDATA]{
 		Sessions: make(map[int64]*Session[BOTDATA, USERDATA]),
 		Handlers: Handlers[BOTDATA, USERDATA]{
 			CommandHandlers: make(map[string]func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message) CmdResult),
 		},
-		delegate: delegate,
+		delegate:    delegate,
+		globalQueue: NewDispatchQueue(1, 100),
 	}
+
+	client.globalQueue.SetProcessHandler(client.processUpdate)
+
+	if err := client.initBotAPI(config.TelegramBotToken); err != nil {
+		return nil, err
+	}
+
+	if err := client.initFirebase(config.FirebaseCredential, config.FirebaseDatabaseURL); err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
 
 func (c *Client[BOTDATA, USERDATA]) initFirebase(credential []byte, databaseURL string) error {
@@ -105,9 +119,14 @@ func (c *Client[BOTDATA, USERDATA]) start() error {
 
 	c.reload()
 
+	c.globalQueue.Start()
 	go c.runLoop()
 
 	return nil
+}
+
+func (c *Client[BOTDATA, USERDATA]) stop() {
+	c.globalQueue.Stop()
 }
 
 func (c *Client[BOTDATA, USERDATA]) reload() error {
@@ -156,15 +175,19 @@ func (c *Client[BOTDATA, USERDATA]) runLoop() {
 	updates.Clear()
 
 	for update := range updates {
-		c.processUpdate(update)
+		c.globalQueue.Enqueue(update)
 	}
 }
 
 func (c *Client[BOTDATA, USERDATA]) getSession(id int64) *Session[BOTDATA, USERDATA] {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.Sessions[id]
 }
 
 func (c *Client[BOTDATA, USERDATA]) insertSession(session *Session[BOTDATA, USERDATA]) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.Sessions[session.ID] = session
 }
 
