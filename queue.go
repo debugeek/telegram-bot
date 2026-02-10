@@ -3,8 +3,6 @@ package tgbot
 import (
 	"context"
 	"sync"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
 type DispatchQueueConfig struct {
@@ -13,18 +11,18 @@ type DispatchQueueConfig struct {
 }
 
 type DispatchQueue struct {
-	queue          chan tgbotapi.Update
+	queue          chan *Update
 	ctx            context.Context
 	cancel         context.CancelFunc
 	wg             sync.WaitGroup
 	workers        int
-	processHandler func(tgbotapi.Update)
+	processHandler func(*Update)
 }
 
 func NewDispatchQueue(workers int, size int) *DispatchQueue {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &DispatchQueue{
-		queue:   make(chan tgbotapi.Update, size),
+		queue:   make(chan *Update, size),
 		ctx:     ctx,
 		cancel:  cancel,
 		workers: workers,
@@ -40,12 +38,12 @@ func (dq *DispatchQueue) Start() {
 				select {
 				case <-dq.ctx.Done():
 					return
-				case update, ok := <-dq.queue:
+				case upd, ok := <-dq.queue:
 					if !ok {
 						return
 					}
-					if dq.processHandler != nil {
-						dq.processHandler(update)
+					if dq.processHandler != nil && upd != nil {
+						dq.processHandler(upd)
 					}
 				}
 			}
@@ -59,7 +57,7 @@ func (dq *DispatchQueue) Stop() {
 	dq.wg.Wait()
 }
 
-func (dq *DispatchQueue) Enqueue(update tgbotapi.Update) {
+func (dq *DispatchQueue) Enqueue(update *Update) {
 	select {
 	case <-dq.ctx.Done():
 		return
@@ -67,6 +65,6 @@ func (dq *DispatchQueue) Enqueue(update tgbotapi.Update) {
 	}
 }
 
-func (dq *DispatchQueue) SetProcessHandler(handler func(tgbotapi.Update)) {
+func (dq *DispatchQueue) SetProcessHandler(handler func(*Update)) {
 	dq.processHandler = handler
 }

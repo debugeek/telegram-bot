@@ -4,12 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"log"
 	"sync"
-	"time"
 
 	firebase "firebase.google.com/go/v4"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"google.golang.org/api/option"
 )
 
@@ -20,12 +17,12 @@ type ClientDelegate[BOTDATA any, USERDATA any] interface {
 }
 
 type Handlers[BOTDATA any, USERDATA any] struct {
-	TextHandler     func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message)
-	CommandHandlers map[string]func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message) CmdResult
+	TextHandler     func(*Session[BOTDATA, USERDATA], string, *Message)
+	CommandHandlers map[string]func(*Session[BOTDATA, USERDATA], string, *Message) CmdResult
 }
 
 type Client[BOTDATA any, USERDATA any] struct {
-	BotAPI      *tgbotapi.BotAPI
+	bot         *botImpl
 	Firebase    Firebase[BOTDATA, USERDATA]
 	Preference  Preference[BOTDATA]
 	Sessions    map[int64]*Session[BOTDATA, USERDATA]
@@ -35,11 +32,15 @@ type Client[BOTDATA any, USERDATA any] struct {
 	globalQueue *DispatchQueue
 }
 
+func (c *Client[BOTDATA, USERDATA]) Bot() BotAPI {
+	return c.bot
+}
+
 func newClient[BOTDATA any, USERDATA any](config Config, delegate ClientDelegate[BOTDATA, USERDATA]) (*Client[BOTDATA, USERDATA], error) {
 	client := &Client[BOTDATA, USERDATA]{
 		Sessions: make(map[int64]*Session[BOTDATA, USERDATA]),
 		Handlers: Handlers[BOTDATA, USERDATA]{
-			CommandHandlers: make(map[string]func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message) CmdResult),
+			CommandHandlers: make(map[string]func(*Session[BOTDATA, USERDATA], string, *Message) CmdResult),
 		},
 		delegate:    delegate,
 		globalQueue: NewDispatchQueue(1, 100),
@@ -47,7 +48,7 @@ func newClient[BOTDATA any, USERDATA any](config Config, delegate ClientDelegate
 
 	client.globalQueue.SetProcessHandler(client.processUpdate)
 
-	if err := client.initBotAPI(config.TelegramBotToken); err != nil {
+	if err := client.initBot(config.TelegramBotToken); err != nil {
 		return nil, err
 	}
 
@@ -59,48 +60,43 @@ func newClient[BOTDATA any, USERDATA any](config Config, delegate ClientDelegate
 }
 
 func (c *Client[BOTDATA, USERDATA]) initFirebase(credential []byte, databaseURL string) error {
-	context := context.Background()
+	ctx := context.Background()
 	opt := option.WithCredentialsJSON(credential)
 	conf := &firebase.Config{
 		DatabaseURL: databaseURL,
 	}
-	app, err := firebase.NewApp(context, conf, opt)
+	app, err := firebase.NewApp(ctx, conf, opt)
 	if err != nil {
 		return err
 	}
 
-	firestore, err := app.Firestore(context)
+	firestore, err := app.Firestore(ctx)
 	if err != nil {
 		return err
 	}
 
-	database, err := app.Database(context)
+	database, err := app.Database(ctx)
 	if err != nil {
 		return err
 	}
 
-	firebase := Firebase[BOTDATA, USERDATA]{
+	c.Firebase = Firebase[BOTDATA, USERDATA]{
 		Firestore: firestore,
 		Database:  database,
-		Context:   context,
+		Context:   ctx,
 	}
-	c.Firebase = firebase
 
 	return nil
 }
 
-func (c *Client[BOTDATA, USERDATA]) initBotAPI(token string) error {
-	botAPI, err := tgbotapi.NewBotAPI(token)
+func (c *Client[BOTDATA, USERDATA]) initBot(token string) error {
+	bi, err := newBotImpl(token, func(u *Update) {
+		c.globalQueue.Enqueue(u)
+	})
 	if err != nil {
 		return err
 	}
-
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 10
-	botAPI.GetUpdates(u)
-
-	c.BotAPI = botAPI
-
+	c.bot = bi
 	return nil
 }
 
@@ -120,12 +116,14 @@ func (c *Client[BOTDATA, USERDATA]) start() error {
 	c.reload()
 
 	c.globalQueue.Start()
-	go c.runLoop()
-
+	ctx, cancel := context.WithCancel(context.Background())
+	c.bot.setCancel(cancel)
+	go c.bot.Start(ctx)
 	return nil
 }
 
 func (c *Client[BOTDATA, USERDATA]) stop() {
+	c.bot.Stop()
 	c.globalQueue.Stop()
 }
 
@@ -149,34 +147,16 @@ func (c *Client[BOTDATA, USERDATA]) reload() error {
 	return nil
 }
 
-func (c *Client[BOTDATA, USERDATA]) registerTextHandler(handler func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message)) {
+func (c *Client[BOTDATA, USERDATA]) registerTextHandler(handler func(*Session[BOTDATA, USERDATA], string, *Message)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Handlers.TextHandler = handler
 }
 
-func (c *Client[BOTDATA, USERDATA]) registerCommandHandler(cmd string, handler func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message) CmdResult) {
+func (c *Client[BOTDATA, USERDATA]) registerCommandHandler(cmd string, handler func(*Session[BOTDATA, USERDATA], string, *Message) CmdResult) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Handlers.CommandHandlers[cmd] = handler
-}
-
-func (c *Client[BOTDATA, USERDATA]) runLoop() {
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 10
-
-	updates, err := c.BotAPI.GetUpdatesChan(u)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	time.Sleep(time.Millisecond * 500)
-	updates.Clear()
-
-	for update := range updates {
-		c.globalQueue.Enqueue(update)
-	}
 }
 
 func (c *Client[BOTDATA, USERDATA]) getSession(id int64) *Session[BOTDATA, USERDATA] {
@@ -191,17 +171,12 @@ func (c *Client[BOTDATA, USERDATA]) insertSession(session *Session[BOTDATA, USER
 	c.Sessions[session.ID] = session
 }
 
-func (c *Client[BOTDATA, USERDATA]) processUpdate(update tgbotapi.Update) {
-	var message *tgbotapi.Message
-	if update.Message != nil {
-		message = update.Message
-	} else if update.ChannelPost != nil {
-		message = update.ChannelPost
-	}
-	if message == nil {
+func (c *Client[BOTDATA, USERDATA]) processUpdate(update *Update) {
+	if update == nil || update.Message == nil {
 		return
 	}
 
+	message := update.Message
 	id := message.Chat.ID
 	session := c.getSession(id)
 	if session == nil {
@@ -222,7 +197,7 @@ func (c *Client[BOTDATA, USERDATA]) processUpdate(update tgbotapi.Update) {
 	c.processMessage(session, message)
 }
 
-func (c *Client[BOTDATA, USERDATA]) processMessage(session *Session[BOTDATA, USERDATA], message *tgbotapi.Message) {
+func (c *Client[BOTDATA, USERDATA]) processMessage(session *Session[BOTDATA, USERDATA], message *Message) {
 	if session.User.Blocked {
 		session.User.Blocked = false
 		c.Firebase.UpdateUser(session.User)
@@ -237,7 +212,7 @@ func (c *Client[BOTDATA, USERDATA]) processMessage(session *Session[BOTDATA, USE
 	}
 }
 
-func (c *Client[BOTDATA, USERDATA]) processCommand(session *Session[BOTDATA, USERDATA], command string, args string, message *tgbotapi.Message) {
+func (c *Client[BOTDATA, USERDATA]) processCommand(session *Session[BOTDATA, USERDATA], command string, args string, message *Message) {
 	switch command {
 	case CmdStart:
 		session.SendTextWithConfig("Greetings.", MessageConfig{
@@ -259,19 +234,23 @@ func (c *Client[BOTDATA, USERDATA]) processCommand(session *Session[BOTDATA, USE
 	}
 
 	if c.Preference.OnlyAdminsCanCommandInGroup && (message.Chat.IsSuperGroup() || message.Chat.IsGroup()) {
-		admins, err := c.BotAPI.GetChatAdministrators(tgbotapi.ChatConfig{ChatID: message.Chat.ID})
+		adminIDs, err := c.bot.GetChatAdministratorIDs(context.Background(), message.Chat.ID)
 		if err != nil {
 			return
 		}
 
 		isAdmin := false
-		for _, admin := range admins {
-			if admin.User.ID == message.From.ID {
+		fromID := int64(0)
+		if message.From != nil {
+			fromID = message.From.ID
+		}
+		for _, id := range adminIDs {
+			if id == fromID {
 				isAdmin = true
 				break
 			}
 		}
-		if !isAdmin && message.From.ID == GroupAnonymousBot {
+		if !isAdmin && fromID == int64(GroupAnonymousBot) {
 			isAdmin = true
 		}
 		if !isAdmin {
@@ -300,7 +279,7 @@ func (c *Client[BOTDATA, USERDATA]) processCommand(session *Session[BOTDATA, USE
 	}
 }
 
-func (c *Client[BOTDATA, USERDATA]) processText(session *Session[BOTDATA, USERDATA], text string, message *tgbotapi.Message) {
+func (c *Client[BOTDATA, USERDATA]) processText(session *Session[BOTDATA, USERDATA], text string, message *Message) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 

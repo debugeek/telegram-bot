@@ -1,7 +1,5 @@
 package tgbot
 
-import tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
-
 type TgBot[BOTDATA any, USERDATA any] struct {
 	Client *Client[BOTDATA, USERDATA]
 }
@@ -22,11 +20,11 @@ func NewBot[BOTDATA any, USERDATA any](config Config, delegate ClientDelegate[BO
 	}, nil
 }
 
-func (tgbot *TgBot[BOTDATA, USERDATA]) RegisterTextHandler(handler func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message)) {
+func (tgbot *TgBot[BOTDATA, USERDATA]) RegisterTextHandler(handler func(*Session[BOTDATA, USERDATA], string, *Message)) {
 	tgbot.Client.registerTextHandler(handler)
 }
 
-func (tgbot *TgBot[BOTDATA, USERDATA]) RegisterCommandHandler(cmd string, handler func(*Session[BOTDATA, USERDATA], string, *tgbotapi.Message) CmdResult) {
+func (tgbot *TgBot[BOTDATA, USERDATA]) RegisterCommandHandler(cmd string, handler func(*Session[BOTDATA, USERDATA], string, *Message) CmdResult) {
 	tgbot.Client.registerCommandHandler(cmd, handler)
 }
 

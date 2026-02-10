@@ -1,18 +1,10 @@
 package tgbot
 
 import (
+	"context"
+	"errors"
 	"os"
 	"strings"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
-)
-
-type ParseMode int
-
-const (
-	ParseModePlain ParseMode = iota
-	ParseModeHTML
-	ParseModeMarkdown
 )
 
 type MessageConfig struct {
@@ -54,64 +46,43 @@ func (s *Session[BOTDATA, USERDATA]) SendTextWithConfig(text string, config Mess
 		text = strings.Join([]string{text, promptText}, "\n\n")
 	}
 
-	message := tgbotapi.MessageConfig{
-		BaseChat: tgbotapi.BaseChat{
-			ChatID:           s.ID,
-			ReplyToMessageID: config.ReplyToMessageID,
-		},
-		Text: text,
+	opts := &SendMessageOpts{
+		ReplyToMessageID: config.ReplyToMessageID,
+		ParseMode:        config.ParseMode,
 	}
-
-	switch config.ParseMode {
-	case ParseModeHTML:
-		message.ParseMode = tgbotapi.ModeHTML
-	case ParseModeMarkdown:
-		message.ParseMode = tgbotapi.ModeMarkdown
-	default:
-		break
+	err := s.client.bot.SendMessage(context.Background(), s.ID, text, opts)
+	if err != nil {
+		s.processError(err)
 	}
-
-	return s.SendMessage(message)
+	return err
 }
 
 func (s *Session[BOTDATA, USERDATA]) SendImage(file *os.File, name string) error {
-	message := tgbotapi.NewPhotoUpload(s.User.ID, tgbotapi.FileReader{
-		Name:   name,
-		Reader: file,
-		Size:   -1,
-	})
-	return s.SendMessage(message)
+	err := s.client.bot.SendPhoto(context.Background(), s.User.ID, file, name)
+	if err != nil {
+		s.processError(err)
+	}
+	return err
 }
 
 func (s *Session[BOTDATA, USERDATA]) SendVideo(file *os.File, name string) error {
-	message := tgbotapi.NewVideoUpload(s.User.ID, tgbotapi.FileReader{
-		Name:   name,
-		Reader: file,
-		Size:   -1,
-	})
-	return s.SendMessage(message)
+	err := s.client.bot.SendVideo(context.Background(), s.User.ID, file, name)
+	if err != nil {
+		s.processError(err)
+	}
+	return err
 }
 
 func (s *Session[BOTDATA, USERDATA]) SendAudio(file *os.File, name string) error {
-	message := tgbotapi.NewAudioUpload(s.User.ID, tgbotapi.FileReader{
-		Name:   name,
-		Reader: file,
-		Size:   -1,
-	})
-	return s.SendMessage(message)
+	err := s.client.bot.SendAudio(context.Background(), s.User.ID, file, name)
+	if err != nil {
+		s.processError(err)
+	}
+	return err
 }
 
 func (s *Session[BOTDATA, USERDATA]) SendFile(file *os.File, name string) error {
-	message := tgbotapi.NewDocumentUpload(s.User.ID, tgbotapi.FileReader{
-		Name:   name,
-		Reader: file,
-		Size:   -1,
-	})
-	return s.SendMessage(message)
-}
-
-func (s *Session[BOTDATA, USERDATA]) SendMessage(message tgbotapi.Chattable) error {
-	_, err := s.client.BotAPI.Send(message)
+	err := s.client.bot.SendDocument(context.Background(), s.User.ID, file, name)
 	if err != nil {
 		s.processError(err)
 	}
@@ -119,8 +90,7 @@ func (s *Session[BOTDATA, USERDATA]) SendMessage(message tgbotapi.Chattable) err
 }
 
 func (s *Session[BOTDATA, USERDATA]) processError(err error) {
-	switch err.Error() {
-	case errChatNotFound, errNotMember:
+	if errors.Is(err, ErrForbidden) || errors.Is(err, ErrChatNotFound) {
 		s.User.Blocked = true
 		s.client.Firebase.UpdateUser(s.User)
 	}

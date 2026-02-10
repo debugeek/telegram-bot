@@ -5,7 +5,7 @@ go 1.22.2
 require (
 	cloud.google.com/go/firestore v1.17.0
 	firebase.google.com/go/v4 v4.15.1
-	github.com/go-telegram-bot-api/telegram-bot-api v4.6.4+incompatible
+	github.com/go-telegram/bot v1.18.0
 	google.golang.org/api v0.214.0
 )
 
@@ -28,7 +28,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.0 // indirect
-	github.com/technoweenie/multipartstreamer v1.0.1 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.54.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.54.0 // indirect
