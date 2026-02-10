@@ -118,11 +118,23 @@ func (bi *botImpl) SendPhoto(ctx context.Context, chatID int64, photo io.Reader,
 	return mapSendError(err)
 }
 
-func (bi *botImpl) SendVideo(ctx context.Context, chatID int64, video io.Reader, filename string) error {
-	_, err := bi.b.SendVideo(ctx, &bot.SendVideoParams{
+func (bi *botImpl) SendVideo(ctx context.Context, chatID int64, video io.Reader, filename string, meta *VideoMeta) error {
+	params := &bot.SendVideoParams{
 		ChatID: chatID,
 		Video:  &models.InputFileUpload{Filename: filename, Data: video},
-	})
+	}
+	if meta != nil {
+		if meta.Duration > 0 {
+			params.Duration = meta.Duration
+		}
+		if meta.Width > 0 {
+			params.Width = meta.Width
+		}
+		if meta.Height > 0 {
+			params.Height = meta.Height
+		}
+	}
+	_, err := bi.b.SendVideo(ctx, params)
 	return mapSendError(err)
 }
 

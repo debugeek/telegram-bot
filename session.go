@@ -65,8 +65,8 @@ func (s *Session[BOTDATA, USERDATA]) SendImage(file *os.File, name string) error
 	return err
 }
 
-func (s *Session[BOTDATA, USERDATA]) SendVideo(file *os.File, name string) error {
-	err := s.client.bot.SendVideo(context.Background(), s.User.ID, file, name)
+func (s *Session[BOTDATA, USERDATA]) SendVideo(file *os.File, name string, meta *VideoMeta) error {
+	err := s.client.bot.SendVideo(context.Background(), s.User.ID, file, name, meta)
 	if err != nil {
 		s.processError(err)
 	}

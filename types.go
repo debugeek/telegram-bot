@@ -29,10 +29,16 @@ type SendMessageOpts struct {
 	ParseMode        ParseMode
 }
 
+type VideoMeta struct {
+	Duration int
+	Width    int
+	Height   int
+}
+
 type BotAPI interface {
 	SendMessage(ctx context.Context, chatID int64, text string, opts *SendMessageOpts) error
 	SendPhoto(ctx context.Context, chatID int64, photo io.Reader, filename string) error
-	SendVideo(ctx context.Context, chatID int64, video io.Reader, filename string) error
+	SendVideo(ctx context.Context, chatID int64, video io.Reader, filename string, meta *VideoMeta) error
 	SendAudio(ctx context.Context, chatID int64, audio io.Reader, filename string) error
 	SendDocument(ctx context.Context, chatID int64, doc io.Reader, filename string) error
 }
