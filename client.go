@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 
 	firebase "firebase.google.com/go/v4"
 	"google.golang.org/api/option"
@@ -30,6 +33,16 @@ type Client[BOTDATA any, USERDATA any] struct {
 	mu          sync.RWMutex
 	delegate    ClientDelegate[BOTDATA, USERDATA]
 	globalQueue *DispatchQueue
+
+	pendingQueryMu sync.Mutex
+	pendingQueries map[string]pendingQuery[BOTDATA, USERDATA]
+	querySeq       uint64
+}
+
+type pendingQuery[BOTDATA any, USERDATA any] struct {
+	sessionID int64
+	answers   map[string]string
+	handler   func(*Session[BOTDATA, USERDATA], string)
 }
 
 func (c *Client[BOTDATA, USERDATA]) Bot() BotAPI {
@@ -42,8 +55,9 @@ func newClient[BOTDATA any, USERDATA any](config Config, delegate ClientDelegate
 		Handlers: Handlers[BOTDATA, USERDATA]{
 			CommandHandlers: make(map[string]func(*Session[BOTDATA, USERDATA], string, *Message) CmdResult),
 		},
-		delegate:    delegate,
-		globalQueue: NewDispatchQueue(1, 100),
+		delegate:       delegate,
+		globalQueue:    NewDispatchQueue(1, 100),
+		pendingQueries: make(map[string]pendingQuery[BOTDATA, USERDATA]),
 	}
 
 	client.globalQueue.SetProcessHandler(client.processUpdate)
@@ -172,12 +186,15 @@ func (c *Client[BOTDATA, USERDATA]) insertSession(session *Session[BOTDATA, USER
 }
 
 func (c *Client[BOTDATA, USERDATA]) processUpdate(update *Update) {
-	if update == nil || update.Message == nil {
+	if update == nil {
 		return
 	}
 
-	message := update.Message
-	id := message.Chat.ID
+	id, ok := c.sessionIDFromUpdate(update)
+	if !ok {
+		return
+	}
+
 	session := c.getSession(id)
 	if session == nil {
 		user := &User[USERDATA]{
@@ -194,7 +211,29 @@ func (c *Client[BOTDATA, USERDATA]) processUpdate(update *Update) {
 		c.delegate.DidLoadUser(session, user)
 	}
 
-	c.processMessage(session, message)
+	if update.CallbackQuery != nil {
+		c.processCallbackQuery(session, update.CallbackQuery)
+		return
+	}
+
+	if update.Message != nil {
+		c.processMessage(session, update.Message)
+	}
+}
+
+func (c *Client[BOTDATA, USERDATA]) sessionIDFromUpdate(update *Update) (int64, bool) {
+	if update.Message != nil {
+		return update.Message.Chat.ID, true
+	}
+	if update.CallbackQuery != nil {
+		if update.CallbackQuery.Message != nil {
+			return update.CallbackQuery.Message.Chat.ID, true
+		}
+		if update.CallbackQuery.From != nil {
+			return update.CallbackQuery.From.ID, true
+		}
+	}
+	return 0, false
 }
 
 func (c *Client[BOTDATA, USERDATA]) processMessage(session *Session[BOTDATA, USERDATA], message *Message) {
@@ -287,4 +326,78 @@ func (c *Client[BOTDATA, USERDATA]) processText(session *Session[BOTDATA, USERDA
 	if handler != nil {
 		handler(session, text, message)
 	}
+}
+
+func (c *Client[BOTDATA, USERDATA]) processCallbackQuery(session *Session[BOTDATA, USERDATA], query *CallbackQuery) {
+	if session.User.Blocked {
+		session.User.Blocked = false
+		c.Firebase.UpdateUser(session.User)
+	}
+
+	if c.handlePendingQueryCallback(session, query) {
+		return
+	}
+}
+
+func (c *Client[BOTDATA, USERDATA]) createPendingQuery(sessionID int64, options []string, handler func(*Session[BOTDATA, USERDATA], string)) *InlineKeyboardMarkup {
+	if len(options) == 0 || handler == nil {
+		return nil
+	}
+
+	queryID := strconv.FormatUint(atomic.AddUint64(&c.querySeq, 1), 10)
+	keyboardRows := make([][]InlineKeyboardButton, 0, len(options))
+	answers := make(map[string]string, len(options))
+	for idx, option := range options {
+		key := strconv.Itoa(idx)
+		callbackToken := strings.Join([]string{"q", queryID, key}, ":")
+		keyboardRows = append(keyboardRows, []InlineKeyboardButton{
+			{Text: option, CallbackData: callbackToken},
+		})
+		answers[key] = option
+	}
+
+	c.pendingQueryMu.Lock()
+	c.pendingQueries[queryID] = pendingQuery[BOTDATA, USERDATA]{
+		sessionID: sessionID,
+		answers:   answers,
+		handler:   handler,
+	}
+	c.pendingQueryMu.Unlock()
+
+	return &InlineKeyboardMarkup{
+		InlineKeyboard: keyboardRows,
+	}
+}
+
+func (c *Client[BOTDATA, USERDATA]) handlePendingQueryCallback(session *Session[BOTDATA, USERDATA], query *CallbackQuery) bool {
+	if query == nil {
+		return false
+	}
+
+	parts := strings.Split(query.Data, ":")
+	if len(parts) != 3 || parts[0] != "q" {
+		return false
+	}
+
+	queryID := parts[1]
+	answerKey := parts[2]
+
+	c.pendingQueryMu.Lock()
+	pending, ok := c.pendingQueries[queryID]
+	if !ok || pending.sessionID != session.ID {
+		c.pendingQueryMu.Unlock()
+		return false
+	}
+
+	answer, ok := pending.answers[answerKey]
+	if !ok {
+		c.pendingQueryMu.Unlock()
+		return false
+	}
+	delete(c.pendingQueries, queryID)
+	c.pendingQueryMu.Unlock()
+
+	_ = session.AnswerCallbackQuery(query.ID)
+	pending.handler(session, answer)
+	return true
 }

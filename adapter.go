@@ -29,6 +29,17 @@ func newBotImpl(token string, onUpdate func(*Update)) (*botImpl, error) {
 }
 
 func updateFromModels(raw *models.Update) *Update {
+	if raw == nil {
+		return nil
+	}
+
+	if raw.CallbackQuery != nil {
+		query := callbackQueryFromModels(raw.CallbackQuery)
+		if query != nil {
+			return &Update{CallbackQuery: query}
+		}
+	}
+
 	var m *models.Message
 	if raw.Message != nil {
 		m = raw.Message
@@ -56,6 +67,33 @@ func messageFromModels(m *models.Message) *Message {
 	return msg
 }
 
+func callbackQueryFromModels(q *models.CallbackQuery) *CallbackQuery {
+	if q == nil {
+		return nil
+	}
+
+	query := &CallbackQuery{
+		ID:              q.ID,
+		Data:            q.Data,
+		InlineMessageID: q.InlineMessageID,
+	}
+	query.From = &MessageSender{ID: q.From.ID}
+
+	if q.Message.Message != nil {
+		query.Message = messageFromModels(q.Message.Message)
+	} else if q.Message.InaccessibleMessage != nil {
+		query.Message = &Message{
+			MessageID: q.Message.InaccessibleMessage.MessageID,
+			Chat: Chat{
+				ID:   q.Message.InaccessibleMessage.Chat.ID,
+				Type: string(q.Message.InaccessibleMessage.Chat.Type),
+			},
+		}
+	}
+
+	return query
+}
+
 func (bi *botImpl) Start(ctx context.Context) {
 	bi.b.Start(ctx)
 }
@@ -70,7 +108,7 @@ func (bi *botImpl) setCancel(cancel context.CancelFunc) {
 	bi.cancel = cancel
 }
 
-func parseModeToLib(pm ParseMode) models.ParseMode {
+func convertParseMode(pm ParseMode) models.ParseMode {
 	switch pm {
 	case ParseModeHTML:
 		return models.ParseModeHTML
@@ -78,6 +116,34 @@ func parseModeToLib(pm ParseMode) models.ParseMode {
 		return models.ParseModeMarkdown
 	default:
 		return ""
+	}
+}
+
+func convertReplyMarkup(markup ReplyMarkup) models.ReplyMarkup {
+	switch m := markup.(type) {
+	case nil:
+		return nil
+	case *InlineKeyboardMarkup:
+		if m == nil {
+			return nil
+		}
+		rows := make([][]models.InlineKeyboardButton, 0, len(m.InlineKeyboard))
+		for _, row := range m.InlineKeyboard {
+			btns := make([]models.InlineKeyboardButton, 0, len(row))
+			for _, btn := range row {
+				btns = append(btns, models.InlineKeyboardButton{
+					Text:         btn.Text,
+					URL:          btn.URL,
+					CallbackData: btn.CallbackData,
+				})
+			}
+			rows = append(rows, btns)
+		}
+		return &models.InlineKeyboardMarkup{InlineKeyboard: rows}
+	case InlineKeyboardMarkup:
+		return convertReplyMarkup(&m)
+	default:
+		return nil
 	}
 }
 
@@ -101,10 +167,11 @@ func (bi *botImpl) SendMessage(ctx context.Context, chatID int64, text string, o
 		Text:   text,
 	}
 	if opts != nil {
-		params.ParseMode = parseModeToLib(opts.ParseMode)
+		params.ParseMode = convertParseMode(opts.ParseMode)
 		if opts.ReplyToMessageID != 0 {
 			params.ReplyParameters = &models.ReplyParameters{MessageID: opts.ReplyToMessageID}
 		}
+		params.ReplyMarkup = convertReplyMarkup(opts.ReplyMarkup)
 	}
 	_, err := bi.b.SendMessage(ctx, params)
 	return mapSendError(err)
@@ -151,6 +218,11 @@ func (bi *botImpl) SendDocument(ctx context.Context, chatID int64, doc io.Reader
 		ChatID:   chatID,
 		Document: &models.InputFileUpload{Filename: filename, Data: doc},
 	})
+	return mapSendError(err)
+}
+
+func (bi *botImpl) AnswerCallbackQuery(ctx context.Context, callbackQueryID string) error {
+	_, err := bi.b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
 	return mapSendError(err)
 }
 

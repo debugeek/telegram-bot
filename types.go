@@ -13,7 +13,8 @@ var (
 )
 
 type Update struct {
-	Message *Message
+	Message       *Message
+	CallbackQuery *CallbackQuery
 }
 
 type ParseMode int
@@ -24,9 +25,22 @@ const (
 	ParseModeMarkdown
 )
 
+type ReplyMarkup interface{}
+
+type InlineKeyboardMarkup struct {
+	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
+}
+
+type InlineKeyboardButton struct {
+	Text         string `json:"text"`
+	URL          string `json:"url,omitempty"`
+	CallbackData string `json:"callback_data,omitempty"`
+}
+
 type SendMessageOpts struct {
 	ReplyToMessageID int
 	ParseMode        ParseMode
+	ReplyMarkup      ReplyMarkup
 }
 
 type VideoMeta struct {
@@ -41,6 +55,7 @@ type BotAPI interface {
 	SendVideo(ctx context.Context, chatID int64, video io.Reader, filename string, meta *VideoMeta) error
 	SendAudio(ctx context.Context, chatID int64, audio io.Reader, filename string) error
 	SendDocument(ctx context.Context, chatID int64, doc io.Reader, filename string) error
+	AnswerCallbackQuery(ctx context.Context, callbackQueryID string) error
 }
 
 type MessageSender struct {
@@ -60,6 +75,14 @@ type Message struct {
 	Chat      Chat
 	From      *MessageSender
 	Text      string
+}
+
+type CallbackQuery struct {
+	ID              string
+	From            *MessageSender
+	Message         *Message
+	Data            string
+	InlineMessageID string
 }
 
 func (m *Message) IsCommand() bool {

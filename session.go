@@ -11,6 +11,7 @@ type MessageConfig struct {
 	ReplyToMessageID int
 	ParseMode        ParseMode
 	PromptKey        string
+	ReplyMarkup      ReplyMarkup
 }
 
 type Session[BOTDATA, USERDATA any] struct {
@@ -49,12 +50,23 @@ func (s *Session[BOTDATA, USERDATA]) SendTextWithConfig(text string, config Mess
 	opts := &SendMessageOpts{
 		ReplyToMessageID: config.ReplyToMessageID,
 		ParseMode:        config.ParseMode,
+		ReplyMarkup:      config.ReplyMarkup,
 	}
 	err := s.client.bot.SendMessage(context.Background(), s.ID, text, opts)
 	if err != nil {
 		s.processError(err)
 	}
 	return err
+}
+
+func (s *Session[BOTDATA, USERDATA]) SendQuery(prompt string, options []string, handler func(*Session[BOTDATA, USERDATA], string)) error {
+	markup := s.client.createPendingQuery(s.ID, options, handler)
+	if markup == nil {
+		return nil
+	}
+	return s.SendTextWithConfig(prompt, MessageConfig{
+		ReplyMarkup: markup,
+	})
 }
 
 func (s *Session[BOTDATA, USERDATA]) SendImage(file *os.File, name string) error {
@@ -83,6 +95,14 @@ func (s *Session[BOTDATA, USERDATA]) SendAudio(file *os.File, name string) error
 
 func (s *Session[BOTDATA, USERDATA]) SendFile(file *os.File, name string) error {
 	err := s.client.bot.SendDocument(context.Background(), s.User.ID, file, name)
+	if err != nil {
+		s.processError(err)
+	}
+	return err
+}
+
+func (s *Session[BOTDATA, USERDATA]) AnswerCallbackQuery(callbackQueryID string) error {
+	err := s.client.bot.AnswerCallbackQuery(context.Background(), callbackQueryID)
 	if err != nil {
 		s.processError(err)
 	}
