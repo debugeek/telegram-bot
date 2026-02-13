@@ -55,7 +55,7 @@ type BotAPI interface {
 	SendVideo(ctx context.Context, chatID int64, video io.Reader, filename string, meta *VideoMeta) error
 	SendAudio(ctx context.Context, chatID int64, audio io.Reader, filename string) error
 	SendDocument(ctx context.Context, chatID int64, doc io.Reader, filename string) error
-	AnswerCallbackQuery(ctx context.Context, callbackQueryID string) error
+	answerCallbackQuery(ctx context.Context, callbackQueryID string) error
 }
 
 type MessageSender struct {

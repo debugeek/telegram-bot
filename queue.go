@@ -19,7 +19,7 @@ type DispatchQueue struct {
 	processHandler func(*Update)
 }
 
-func NewDispatchQueue(workers int, size int) *DispatchQueue {
+func newDispatchQueue(workers int, size int) *DispatchQueue {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &DispatchQueue{
 		queue:   make(chan *Update, size),

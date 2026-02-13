@@ -101,8 +101,8 @@ func (s *Session[BOTDATA, USERDATA]) SendFile(file *os.File, name string) error 
 	return err
 }
 
-func (s *Session[BOTDATA, USERDATA]) AnswerCallbackQuery(callbackQueryID string) error {
-	err := s.client.bot.AnswerCallbackQuery(context.Background(), callbackQueryID)
+func (s *Session[BOTDATA, USERDATA]) answerCallbackQuery(callbackQueryID string) error {
+	err := s.client.bot.answerCallbackQuery(context.Background(), callbackQueryID)
 	if err != nil {
 		s.processError(err)
 	}

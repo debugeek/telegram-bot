@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	firebase "firebase.google.com/go/v4"
 	"google.golang.org/api/option"
@@ -34,9 +32,7 @@ type Client[BOTDATA any, USERDATA any] struct {
 	delegate    ClientDelegate[BOTDATA, USERDATA]
 	globalQueue *DispatchQueue
 
-	pendingQueryMu sync.Mutex
-	pendingQueries map[string]pendingQuery[BOTDATA, USERDATA]
-	querySeq       uint64
+	queryStore *queryStore[BOTDATA, USERDATA]
 }
 
 type pendingQuery[BOTDATA any, USERDATA any] struct {
@@ -55,9 +51,9 @@ func newClient[BOTDATA any, USERDATA any](config Config, delegate ClientDelegate
 		Handlers: Handlers[BOTDATA, USERDATA]{
 			CommandHandlers: make(map[string]func(*Session[BOTDATA, USERDATA], string, *Message) CmdResult),
 		},
-		delegate:       delegate,
-		globalQueue:    NewDispatchQueue(1, 100),
-		pendingQueries: make(map[string]pendingQuery[BOTDATA, USERDATA]),
+		delegate:    delegate,
+		globalQueue: newDispatchQueue(1, 100),
+		queryStore:  newQueryStore[BOTDATA, USERDATA](5),
 	}
 
 	client.globalQueue.SetProcessHandler(client.processUpdate)
@@ -340,33 +336,7 @@ func (c *Client[BOTDATA, USERDATA]) processCallbackQuery(session *Session[BOTDAT
 }
 
 func (c *Client[BOTDATA, USERDATA]) createPendingQuery(sessionID int64, options []string, handler func(*Session[BOTDATA, USERDATA], string)) *InlineKeyboardMarkup {
-	if len(options) == 0 || handler == nil {
-		return nil
-	}
-
-	queryID := strconv.FormatUint(atomic.AddUint64(&c.querySeq, 1), 10)
-	keyboardRows := make([][]InlineKeyboardButton, 0, len(options))
-	answers := make(map[string]string, len(options))
-	for idx, option := range options {
-		key := strconv.Itoa(idx)
-		callbackToken := strings.Join([]string{"q", queryID, key}, ":")
-		keyboardRows = append(keyboardRows, []InlineKeyboardButton{
-			{Text: option, CallbackData: callbackToken},
-		})
-		answers[key] = option
-	}
-
-	c.pendingQueryMu.Lock()
-	c.pendingQueries[queryID] = pendingQuery[BOTDATA, USERDATA]{
-		sessionID: sessionID,
-		answers:   answers,
-		handler:   handler,
-	}
-	c.pendingQueryMu.Unlock()
-
-	return &InlineKeyboardMarkup{
-		InlineKeyboard: keyboardRows,
-	}
+	return c.queryStore.Create(sessionID, options, handler)
 }
 
 func (c *Client[BOTDATA, USERDATA]) handlePendingQueryCallback(session *Session[BOTDATA, USERDATA], query *CallbackQuery) bool {
@@ -382,22 +352,17 @@ func (c *Client[BOTDATA, USERDATA]) handlePendingQueryCallback(session *Session[
 	queryID := parts[1]
 	answerKey := parts[2]
 
-	c.pendingQueryMu.Lock()
-	pending, ok := c.pendingQueries[queryID]
+	pending, ok := c.queryStore.Take(queryID)
 	if !ok || pending.sessionID != session.ID {
-		c.pendingQueryMu.Unlock()
 		return false
 	}
 
 	answer, ok := pending.answers[answerKey]
 	if !ok {
-		c.pendingQueryMu.Unlock()
 		return false
 	}
-	delete(c.pendingQueries, queryID)
-	c.pendingQueryMu.Unlock()
 
-	_ = session.AnswerCallbackQuery(query.ID)
+	_ = session.answerCallbackQuery(query.ID)
 	pending.handler(session, answer)
 	return true
 }

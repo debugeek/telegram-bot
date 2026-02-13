@@ -221,7 +221,7 @@ func (bi *botImpl) SendDocument(ctx context.Context, chatID int64, doc io.Reader
 	return mapSendError(err)
 }
 
-func (bi *botImpl) AnswerCallbackQuery(ctx context.Context, callbackQueryID string) error {
+func (bi *botImpl) answerCallbackQuery(ctx context.Context, callbackQueryID string) error {
 	_, err := bi.b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
 	return mapSendError(err)
 }
