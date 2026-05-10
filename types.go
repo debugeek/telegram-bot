@@ -37,6 +37,50 @@ type InlineKeyboardButton struct {
 	CallbackData string `json:"callback_data,omitempty"`
 }
 
+type ReplyKeyboardMarkup struct {
+	Keyboard              [][]KeyboardButton `json:"keyboard"`
+	IsPersistent          bool               `json:"is_persistent,omitempty"`
+	ResizeKeyboard        bool               `json:"resize_keyboard,omitempty"`
+	OneTimeKeyboard       bool               `json:"one_time_keyboard,omitempty"`
+	InputFieldPlaceholder string             `json:"input_field_placeholder,omitempty"`
+	Selective             bool               `json:"selective,omitempty"`
+}
+
+type KeyboardButton struct {
+	Text string `json:"text"`
+}
+
+type ReplyKeyboardRemove struct {
+	RemoveKeyboard bool `json:"remove_keyboard"`
+	Selective      bool `json:"selective,omitempty"`
+}
+
+func NewKeyboardButton(text string) KeyboardButton {
+	return KeyboardButton{Text: text}
+}
+
+func NewKeyboardButtonRow(buttons ...KeyboardButton) []KeyboardButton {
+	row := make([]KeyboardButton, 0, len(buttons))
+	row = append(row, buttons...)
+	return row
+}
+
+func NewReplyKeyboard(rows ...[]KeyboardButton) ReplyKeyboardMarkup {
+	keyboard := make([][]KeyboardButton, 0, len(rows))
+	keyboard = append(keyboard, rows...)
+	return ReplyKeyboardMarkup{
+		Keyboard:       keyboard,
+		ResizeKeyboard: true,
+	}
+}
+
+func NewRemoveKeyboard(selective bool) ReplyKeyboardRemove {
+	return ReplyKeyboardRemove{
+		RemoveKeyboard: true,
+		Selective:      selective,
+	}
+}
+
 type SendMessageOpts struct {
 	ReplyToMessageID int
 	ParseMode        ParseMode

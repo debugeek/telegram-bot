@@ -142,6 +142,38 @@ func convertReplyMarkup(markup ReplyMarkup) models.ReplyMarkup {
 		return &models.InlineKeyboardMarkup{InlineKeyboard: rows}
 	case InlineKeyboardMarkup:
 		return convertReplyMarkup(&m)
+	case *ReplyKeyboardMarkup:
+		if m == nil {
+			return nil
+		}
+		rows := make([][]models.KeyboardButton, 0, len(m.Keyboard))
+		for _, row := range m.Keyboard {
+			btns := make([]models.KeyboardButton, 0, len(row))
+			for _, btn := range row {
+				btns = append(btns, models.KeyboardButton{Text: btn.Text})
+			}
+			rows = append(rows, btns)
+		}
+		return &models.ReplyKeyboardMarkup{
+			Keyboard:              rows,
+			IsPersistent:          m.IsPersistent,
+			ResizeKeyboard:        m.ResizeKeyboard,
+			OneTimeKeyboard:       m.OneTimeKeyboard,
+			InputFieldPlaceholder: m.InputFieldPlaceholder,
+			Selective:             m.Selective,
+		}
+	case ReplyKeyboardMarkup:
+		return convertReplyMarkup(&m)
+	case *ReplyKeyboardRemove:
+		if m == nil {
+			return nil
+		}
+		return &models.ReplyKeyboardRemove{
+			RemoveKeyboard: m.RemoveKeyboard,
+			Selective:      m.Selective,
+		}
+	case ReplyKeyboardRemove:
+		return convertReplyMarkup(&m)
 	default:
 		return nil
 	}
